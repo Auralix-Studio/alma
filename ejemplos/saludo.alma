@@ -1,0 +1,7 @@
+// Programa de ejemplo en Alma — sirve para probar el lexer.
+importar sistema
+
+funcion principal()
+    nombre = "Auralix"
+    imprimir("Hola, " + nombre)
+fin

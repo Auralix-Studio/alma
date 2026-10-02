@@ -1,0 +1,22 @@
+// Concurrencia en Alma: asincrona / esperar / hilo.
+// Nota: el intérprete resuelve las promesas de forma síncrona; el paralelismo
+// real (event loop / hilos nativos) llega con el runtime nativo.
+importar sistema
+
+asincrona funcion calcular(n: entero) -> entero
+    retornar n * n
+fin
+
+funcion tarea_segundo_plano()
+    imprimir("  (tarea de fondo ejecutada)")
+fin
+
+funcion principal()
+    imprimir("Lanzando cálculos asíncronos...")
+    a = calcular(3)
+    b = calcular(4)
+    imprimir("Resultado: " + texto(esperar a + esperar b))
+
+    hilo tarea_segundo_plano()
+    imprimir("Fin del programa")
+fin

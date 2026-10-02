@@ -1,0 +1,124 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Alma",
+  "scopeName": "source.alma",
+  "fileTypes": ["alma"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#declarations" },
+    { "include": "#keywords" },
+    { "include": "#constants" },
+    { "include": "#types" },
+    { "include": "#builtins" },
+    { "include": "#function-calls" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.documentation.alma", "match": "///.*$" },
+        { "name": "comment.line.documentation.alma", "match": "//!.*$" },
+        { "name": "comment.line.double-slash.alma", "match": "//.*$" }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.alma",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        { "name": "constant.character.escape.alma", "match": "\\\\." }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.decimal.alma",
+          "match": "\\b[0-9][0-9_]*\\.[0-9][0-9_]*([eE][+-]?[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.alma",
+          "match": "\\b[0-9][0-9_]*\\b"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(funcion)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)",
+          "captures": {
+            "1": { "name": "storage.type.function.alma" },
+            "2": { "name": "entity.name.function.alma" }
+          }
+        },
+        {
+          "match": "\\b(estructura|modelo)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)",
+          "captures": {
+            "1": { "name": "storage.type.alma" },
+            "2": { "name": "entity.name.type.alma" }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.alma",
+          "match": "\\b(si|sino|mientras|para|en|romper|continuar|retornar|intentar|capturar|fin)\\b"
+        },
+        {
+          "name": "keyword.control.import.alma",
+          "match": "\\b(importar|exportar|desde)\\b"
+        },
+        {
+          "name": "storage.type.alma",
+          "match": "\\b(funcion|estructura|modelo)\\b"
+        },
+        {
+          "name": "storage.modifier.alma",
+          "match": "\\b(fijo|externa|asincrona)\\b"
+        },
+        {
+          "name": "keyword.control.async.alma",
+          "match": "\\b(esperar|hilo)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        { "name": "constant.language.boolean.alma", "match": "\\b(verdadero|falso)\\b" },
+        { "name": "constant.language.null.alma", "match": "\\b(nulo)\\b" },
+        { "name": "variable.language.self.alma", "match": "\\b(yo)\\b" }
+      ]
+    },
+    "types": {
+      "name": "support.type.alma",
+      "match": "\\b(entero|decimal|texto|logico|diccionario|lista|byte)\\b"
+    },
+    "builtins": {
+      "name": "support.function.builtin.alma",
+      "match": "\\b(imprimir|rango|longitud|agregar|claves|tiene)\\b"
+    },
+    "function-calls": {
+      "patterns": [
+        {
+          "match": "([\\p{L}_][\\p{L}\\p{N}_]*)\\s*(?=\\()",
+          "captures": {
+            "1": { "name": "entity.name.function.call.alma" }
+          }
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        { "name": "keyword.operator.arrow.alma", "match": "->" },
+        { "name": "keyword.operator.comparison.alma", "match": "==|!=|<=|>=|<|>" },
+        { "name": "keyword.operator.logical.alma", "match": "&&|\\|\\||!" },
+        { "name": "keyword.operator.assignment.alma", "match": "=" },
+        { "name": "keyword.operator.arithmetic.alma", "match": "[+\\-*/%]" },
+        { "name": "keyword.operator.accessor.alma", "match": "\\." }
+      ]
+    }
+  }
+}

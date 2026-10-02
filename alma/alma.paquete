@@ -1,0 +1,5 @@
+nombre = alma
+version = 0.1.0
+entrada = principal.alma
+
+[dependencias]

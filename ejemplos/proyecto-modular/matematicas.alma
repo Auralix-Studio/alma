@@ -1,0 +1,8 @@
+// Módulo de utilidades matemáticas.
+exportar funcion cuadrado(n: entero) -> entero
+    retornar n * n
+fin
+
+exportar funcion cubo(n: entero) -> entero
+    retornar n * n * n
+fin

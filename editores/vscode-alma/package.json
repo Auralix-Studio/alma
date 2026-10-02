@@ -1,0 +1,40 @@
+{
+  "name": "alma-lang",
+  "displayName": "Alma Language",
+  "description": "Resaltado de sintaxis para el lenguaje Alma (ecosistema Auralix).",
+  "version": "0.1.0",
+  "publisher": "auralix",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "alma",
+    "auralix",
+    "español"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "alma",
+        "aliases": [
+          "Alma",
+          "alma"
+        ],
+        "extensions": [
+          ".alma"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "alma",
+        "scopeName": "source.alma",
+        "path": "./syntaxes/alma.tmLanguage.json"
+      }
+    ]
+  }
+}

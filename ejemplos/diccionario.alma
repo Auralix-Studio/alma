@@ -1,0 +1,22 @@
+// Diccionarios en Alma.
+// Ejecutar con:  alma ejecutar ejemplos/diccionario.alma
+importar sistema
+
+funcion principal()
+    inventario = {"manzanas": 5, "peras": 3, "uvas": 12}
+
+    imprimir("Inventario:")
+    imprimir(inventario)
+
+    imprimir("Peras disponibles:")
+    imprimir(inventario["peras"])
+
+    // Agregar una clave y recorrer todo el diccionario
+    inventario["naranjas"] = 8
+    total = 0
+    para fruta en inventario
+        total = total + inventario[fruta]
+    fin
+    imprimir("Total de frutas:")
+    imprimir(total)
+fin

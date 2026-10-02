@@ -1,0 +1,3 @@
+# Artefactos de Zig
+.zig-cache/
+zig-out/
