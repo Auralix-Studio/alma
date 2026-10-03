@@ -1203,6 +1203,12 @@ const JsonParser = struct {
     interp: *Interprete,
     s: []const u8,
     pos: usize = 0,
+    profundidad: usize = 0,
+
+    fn entrar(self: *JsonParser) ErrorEjec!void {
+        if (self.profundidad >= limites.json) return self.err("límite de anidamiento excedido");
+        self.profundidad += 1;
+    }
 
     fn err(self: *JsonParser, m: []const u8) ErrorEjec {
         return self.interp.fallar("JSON inválido: {s}", .{m});
@@ -1280,6 +1286,8 @@ const JsonParser = struct {
         return .{ .decimal = d };
     }
     fn arreglo(self: *JsonParser) ErrorEjec!Valor {
+        try self.entrar();
+        defer self.profundidad -= 1;
         self.pos += 1; // '['
         const lst = try self.interp.a().create(Lista);
         lst.* = .empty;
@@ -1300,6 +1308,8 @@ const JsonParser = struct {
         return .{ .lista = lst };
     }
     fn objeto(self: *JsonParser) ErrorEjec!Valor {
+        try self.entrar();
+        defer self.profundidad -= 1;
         self.pos += 1; // '{'
         const d = try self.interp.a().create(Diccionario);
         d.* = .empty;
@@ -1449,6 +1459,26 @@ fn redPublicar(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
 }
 
 // — Pruebas —
+
+test "JSON limita contenedores anidados y permite analizar despues del error" {
+    var interp = try Interprete.init(std.testing.allocator);
+    defer interp.deinit();
+    for (0..2) |_| {
+        _ = try jsonAnalizar(&interp, &.{.{ .texto = "[" ** 64 ++ "0" ++ "]" ** 64 }});
+        try std.testing.expectError(error.ErrorEjecucion, jsonAnalizar(&interp, &.{.{ .texto = "[" ** 65 ++ "0" ++ "]" ** 65 }}));
+        try std.testing.expectEqualStrings("JSON inválido: límite de anidamiento excedido", interp.diag.?);
+        const normal = try jsonAnalizar(&interp, &.{.{ .texto = "42" }});
+        try std.testing.expectEqual(@as(i64, 42), normal.entero);
+    }
+}
+
+test "JSON comparte profundidad entre objetos y arreglos" {
+    var interp = try Interprete.init(std.testing.allocator);
+    defer interp.deinit();
+    _ = try jsonAnalizar(&interp, &.{.{ .texto = "[{\"x\":" ** 32 ++ "0" ++ "}]" ** 32 }});
+    try std.testing.expectError(error.ErrorEjecucion, jsonAnalizar(&interp, &.{.{ .texto = "[{\"x\":" ** 32 ++ "[]" ++ "}]" ** 32 }}));
+    try std.testing.expectEqualStrings("JSON inválido: límite de anidamiento excedido", interp.diag.?);
+}
 
 test "limite de llamadas: frontera captura y recuperacion" {
     try esperarSalida(

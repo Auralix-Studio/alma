@@ -54,6 +54,12 @@ Las rutas son relativas al directorio de trabajo. Requiere E/S (disponible en `a
 | `analizar(texto)` | JSON → valor Alma (diccionario/lista/número/texto/logico/nulo) |
 | `serializar(valor)` | valor Alma → texto JSON |
 
+`analizar` admite hasta 64 contenedores abiertos, contando conjuntamente objetos
+y arreglos. Los escalares no suman profundidad. Entrar en el contenedor 65
+produce el error capturable `JSON inválido: límite de anidamiento excedido`.
+El contador se restaura al salir, también en errores. Este límite no cambia
+todavía `serializar`, que requiere protección separada frente a ciclos.
+
 ## `red` (cliente HTTP/HTTPS)
 | Miembro | Descripción |
 |---|---|

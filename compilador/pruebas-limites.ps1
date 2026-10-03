@@ -98,4 +98,25 @@ fin
     Comprobar ($r.Codigo -eq 1 -and $r.Error.Contains('recursion-c.alma:2:5:') -and $r.Error.Contains('desbordamiento de pila')) "Recursión C: $($r.Codigo) $($r.Error)"
 }
 
+if ($Seccion -in @('todo', 'json')) {
+    $plantilla = @'
+importar json
+funcion principal()
+    intentar
+        json.analizar("MARCADOR")
+    capturar (e)
+        imprimir(e.mensaje)
+    fin
+    imprimir(json.analizar("42"))
+fin
+'@
+    foreach ($completo in @($false, $true)) {
+        $datos = '[' * 300000
+        if ($completo) { $datos += '0' + (']' * 300000) }
+        $archivo = Guardar "json-$completo.alma" ($plantilla.Replace('MARCADOR', $datos))
+        $r = Ejecutar $Alma @('ejecutar', $archivo)
+        Comprobar ($r.Codigo -eq 0 -and $r.Salida.Replace("`r`n", "`n") -eq "JSON inválido: límite de anidamiento excedido`n42`n") "JSON profundo: $($r.Codigo) $($r.Error) $($r.Salida)"
+    }
+}
+
 Write-Output "$script:comprobaciones comprobaciones de límites correctas ($Seccion)."
