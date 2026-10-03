@@ -222,6 +222,27 @@ reservados. Esto mantiene el conjunto de keywords pequeño y evita rigidez.
   `v0.1`. 🟡`[PROP]` (interpolación tipo `"Hola {nombre}"` queda como futura).
 - 🟡`[PROP]` No hay tipo carácter separado; un carácter es un `texto` de longitud 1.
 
+#### Propuesta de escapes v0.2 (2026-10-03, pendiente de confirmación)
+
+Unificar la decodificación del intérprete y la IR con esta lista cerrada:
+
+| Escape | Bytes resultantes |
+|---|---|
+| `\n` | LF, `0A` |
+| `\t` | tabulador, `09` |
+| `\r` | CR, `0D` |
+| `\\` | barra inversa, `5C` |
+| `\"` | comilla doble, `22` |
+| `\0` | NUL, `00` |
+
+Rechazar un escape desconocido en el análisis léxico con archivo:línea:columna,
+en vez de eliminar silenciosamente la barra. `\u{...}` continúa diferido y se
+diagnostica como no soportado. Un NUL dentro de un texto cuenta como un byte;
+impresión, longitud y concatenación deben conservarlo sin truncar el texto.
+JSON usa su propia gramática de escapes: serializar NUL como `\u0000`, nunca
+como `\0`. Aprobar esta propuesta antes de cambiar el comportamiento existente.
+Véase también [la propuesta numérica](../PROPUESTA-NUMEROS.md).
+
 ### 8.4 Lógicos y nulo
 `verdadero` / `falso` (§6.5) · `nulo` 🟡`[PROP]`.
 
