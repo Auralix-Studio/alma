@@ -1,0 +1,7 @@
+// motores: interprete c propio
+// codigo: 1
+funcion principal()
+    a = 9223372036854775807
+    imprimir("previo")
+    imprimir(a + 1)
+fin

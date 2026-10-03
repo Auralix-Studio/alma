@@ -1,0 +1,6 @@
+// motores: interprete c propio
+importar doble desde "modulos/operaciones"
+importar saludo desde "modulos/operaciones"
+funcion principal()
+    imprimir(doble(21), saludo())
+fin

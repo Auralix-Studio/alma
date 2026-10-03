@@ -1,0 +1,15 @@
+// motores: interprete c
+funcion repetir(s: texto, n: entero) -> texto
+    r = ""
+    i = 0
+    mientras i < n
+        r = r + s
+        i = i + 1
+    fin
+    retornar r
+fin
+funcion principal()
+    imprimir("n=" + texto(42) + ", d=" + texto(0.25) + ", l=" + texto(verdadero) + ", z=" + texto(nulo))
+    imprimir(repetir("ab", 5), texto(-7) + texto(-0.0))
+    imprimir(texto("ya es texto") == "ya es texto")
+fin

@@ -1,0 +1,13 @@
+// motores: interprete c propio
+// codigo: 1
+funcion bajar(n: entero) -> entero
+    si n == 0
+        retornar 42
+    fin
+    retornar bajar(n - 1)
+fin
+funcion principal()
+    imprimir("antes")
+    imprimir(bajar(63))
+    imprimir("despues")
+fin

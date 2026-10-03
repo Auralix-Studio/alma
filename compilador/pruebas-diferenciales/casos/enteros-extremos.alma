@@ -1,0 +1,8 @@
+// motores: interprete c propio
+funcion principal()
+    minimo = -9223372036854775808
+    maximo = 9223372036854775807
+    imprimir(minimo, maximo, minimo % -1, minimo + 1, maximo - 1)
+    imprimir(9007199254740992 < 9007199254740993, maximo > minimo, minimo == -9223372036854775807 - 1)
+    imprimir(-(9223372036854775808))
+fin

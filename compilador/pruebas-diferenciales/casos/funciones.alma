@@ -1,0 +1,37 @@
+// motores: interprete c propio
+funcion factorial(n: entero) -> entero
+    si n <= 1
+        retornar 1
+    fin
+    retornar n * factorial(n - 1)
+fin
+funcion fib(n: entero) -> entero
+    si n < 2
+        retornar n
+    fin
+    retornar fib(n - 1) + fib(n - 2)
+fin
+funcion par(n: entero) -> logico
+    si n == 0
+        retornar verdadero
+    fin
+    retornar impar(n - 1)
+fin
+funcion impar(n: entero) -> logico
+    si n == 0
+        retornar falso
+    fin
+    retornar par(n - 1)
+fin
+funcion marca(n: entero) -> entero
+    imprimir("marca", n)
+    retornar n
+fin
+funcion nada()
+    x = 1
+fin
+funcion principal()
+    imprimir(factorial(20), fib(20), par(10), impar(7))
+    imprimir(marca(1) + marca(2) * marca(3))
+    imprimir(nada())
+fin

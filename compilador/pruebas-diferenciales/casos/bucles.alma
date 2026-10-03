@@ -1,0 +1,27 @@
+// motores: interprete c propio
+funcion principal()
+    i = 0
+    total = 0
+    mientras i < 10
+        i = i + 1
+        si i % 2 == 0
+            continuar
+        fin
+        j = 0
+        mientras verdadero
+            j = j + 1
+            si j > i
+                romper
+            fin
+            total = total + j
+        fin
+    fin
+    imprimir(i, total)
+    si total > 100
+        imprimir("grande")
+    sino si total > 50
+        imprimir("mediano")
+    sino
+        imprimir("chico")
+    fin
+fin

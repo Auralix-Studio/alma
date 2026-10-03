@@ -1,0 +1,20 @@
+// motores: interprete
+modelo Cuenta
+    saldo: entero
+    funcion retirar(monto: entero)
+        si monto > saldo
+            lanzar error("saldo insuficiente")
+        fin
+        saldo = saldo - monto
+    fin
+fin
+funcion principal()
+    c = Cuenta(10)
+    c.retirar(3)
+    intentar
+        c.retirar(100)
+    capturar (e)
+        imprimir("error:", e.mensaje)
+    fin
+    imprimir(c.saldo)
+fin

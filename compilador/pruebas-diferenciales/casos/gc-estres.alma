@@ -1,0 +1,14 @@
+// motores: interprete
+funcion principal()
+    i = 0
+    s = ""
+    mientras i < 200000
+        t = "x" + texto(i)
+        l = [t, i, {"k": t}]
+        si i % 1000 == 0
+            s = s + "."
+        fin
+        i = i + 1
+    fin
+    imprimir(i, longitud(s), l[0], t)
+fin

@@ -1,0 +1,6 @@
+exportar funcion doble(n: entero) -> entero
+    retornar n * 2
+fin
+exportar funcion saludo() -> texto
+    retornar "hola desde modulo"
+fin

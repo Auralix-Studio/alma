@@ -1,0 +1,8 @@
+// motores: interprete c propio
+funcion principal()
+    imprimir("Hola, Alma: áéíóú", verdadero, falso, nulo)
+    imprimir("a" == "a", "a" == "b", "á" != "a", nulo == falso, nulo == nulo)
+    imprimir(1 == 1, 1 != 2, verdadero == verdadero, "x" == 1)
+    imprimir(-5, 0, 7 * 6, 17 / 5, 17 % 5, -17 / 5, -17 % 5)
+    imprimir(!verdadero, verdadero && falso, falso || verdadero)
+fin

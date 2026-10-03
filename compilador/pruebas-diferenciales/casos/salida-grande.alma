@@ -1,0 +1,8 @@
+// motores: interprete c propio
+funcion principal()
+    i = 1
+    mientras i <= 3000
+        imprimir("linea", i)
+        i = i + 1
+    fin
+fin

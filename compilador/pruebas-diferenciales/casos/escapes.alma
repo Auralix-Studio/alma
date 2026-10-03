@@ -1,0 +1,5 @@
+// motores: interprete c propio
+funcion principal()
+    imprimir("a\0b", "tab\tfin", "barra\\", "comilla\"")
+    imprimir("linea1\nlinea2")
+fin

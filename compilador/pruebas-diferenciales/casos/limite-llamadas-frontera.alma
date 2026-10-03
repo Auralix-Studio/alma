@@ -1,0 +1,10 @@
+// motores: interprete c propio
+funcion bajar(n: entero) -> entero
+    si n == 0
+        retornar 42
+    fin
+    retornar bajar(n - 1)
+fin
+funcion principal()
+    imprimir(bajar(62))
+fin

@@ -1,0 +1,7 @@
+// motores: interprete
+funcion principal()
+    l = [1, 2, 3]
+    agregar(l, 4)
+    d = {"a": 1, "b": [1.5, "x"]}
+    imprimir(l, longitud(l), d, d["b"][0])
+fin

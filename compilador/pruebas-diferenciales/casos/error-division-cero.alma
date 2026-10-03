@@ -1,0 +1,8 @@
+// motores: interprete c propio
+// codigo: 1
+funcion principal()
+    imprimir("uno")
+    a = 0
+    imprimir(10 / a)
+    imprimir("nunca")
+fin
