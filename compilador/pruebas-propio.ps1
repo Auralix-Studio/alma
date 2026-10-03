@@ -65,8 +65,8 @@ fin
 '@ "Hola, Alma: áéíóú verdadero falso nulo`nverdadero falso verdadero falso"
     $exeBasico = Join-Path $casos 'basico.exe'
     $hash = (Get-FileHash -LiteralPath $exeBasico -Algorithm SHA256).Hash
-    $r = Invocar $Alma @('compilar', $basico, '--backend=propio')
-    Comprobar ($r.Codigo -eq 0 -and (Get-FileHash -LiteralPath $exeBasico -Algorithm SHA256).Hash -eq $hash) 'La compilación no es reproducible'
+    $r = Invocar $Alma @('compilar', $basico, '--backend=propio', '--sobrescribir')
+    Comprobar ($r.Codigo -eq 0 -and (Get-FileHash -LiteralPath $exeBasico -Algorithm SHA256).Hash -eq $hash) "La compilación no es reproducible: Codigo=$($r.Codigo) Error=$($r.Error)"
 
     [void](Probar 'enteros' @'
 funcion principal()
