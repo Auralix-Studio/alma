@@ -64,11 +64,17 @@ funcion principal()
     b = 9007199254740993
     imprimir(a == b, a != b, a < b, b > a, b <= a, a >= b)
     imprimir(-b < -a, -b == -a)
+    minimo = -9223372036854775807 - 1
+    imprimir(minimo % -1, -7 / 3, -7 % 3)
 fin
 '@
 $interpretado = Invocar @('ejecutar', $principal)
 Comprobar ($interpretado.Codigo -eq 0) $interpretado.Texto
-$esperado = "42`nfalso verdadero verdadero verdadero falso falso`nverdadero falso"
+$ir = Invocar @('ir', $principal)
+Comprobar ($ir.Codigo -eq 0) $ir.Texto
+$documentoIr = $ir.Texto | ConvertFrom-Json
+Comprobar ($documentoIr.version -eq 1 -and $documentoIr.funciones.Count -eq 2) 'IR sin módulos o versión incorrecta'
+$esperado = "42`nfalso verdadero verdadero verdadero falso falso`nverdadero falso`n0 -2 -1"
 Comprobar ($interpretado.Texto.Replace("`r`n", "`n") -eq $esperado) 'Resultado interpretado incorrecto'
 $r = Invocar @('compilar', $principal)
 Comprobar ($r.Codigo -eq 0) $r.Texto
@@ -76,6 +82,153 @@ $nativo = Join-Path $casos 'principal.exe'
 $salidaNativa = (& $nativo | Out-String).Trim()
 Comprobar ($LASTEXITCODE -eq 0) 'Falló el ejecutable nativo'
 Comprobar ($salidaNativa.Replace("`r`n", "`n") -eq $esperado) 'El resultado nativo difiere del intérprete'
+
+function ProbarSalida([string]$Nombre, [string]$Fuente, [string]$Esperado, [switch]$VerificarMemoria) {
+    $archivo = Guardar ($Nombre + '.alma') $Fuente
+    $r = Invocar @('ejecutar', $archivo)
+    Comprobar ($r.Codigo -eq 0 -and $r.Texto.Replace("`r`n", "`n") -eq $Esperado) "Intérprete: $Nombre : $($r.Texto)"
+    $r = Invocar @('compilar', $archivo)
+    Comprobar ($r.Codigo -eq 0) "Compilación: $Nombre : $($r.Texto)"
+    $binario = Join-Path $casos ($Nombre + '.exe')
+    $salida = & $binario 2>&1
+    $codigo = $LASTEXITCODE
+    Comprobar ($codigo -eq 0 -and ($salida | Out-String).Trim().Replace("`r`n", "`n") -eq $Esperado) "Runtime nativo: $Nombre : $salida"
+    if ($VerificarMemoria) {
+        $fuenteC = Join-Path $casos ($Nombre + '.c')
+        $binarioMemoria = Join-Path $casos ($Nombre + '-memoria.exe')
+        $compilacion = & zig cc $fuenteC -O2 -DALMA_VERIFICAR_MEMORIA -DALMA_LIMITE_TEXTOS=32 -o $binarioMemoria 2>&1
+        Comprobar ($LASTEXITCODE -eq 0) "Instrumentación de memoria: $compilacion"
+        $salida = & $binarioMemoria 2>&1
+        $codigo = $LASTEXITCODE
+        Comprobar ($codigo -eq 0 -and ($salida | Out-String).Trim().Replace("`r`n", "`n") -eq $Esperado) "Memoria: $Nombre : $salida"
+    }
+}
+
+ProbarSalida 'memoria-textos' @'
+funcion renovar(base: texto, i: entero) -> texto
+    local = base + texto(i)
+    copia = local
+    local = "descartado"
+    retornar copia
+fin
+funcion identidad(s: texto) -> texto
+    retornar texto(s)
+fin
+funcion principal()
+    i = 0
+    mientras i < 2000
+        t = renovar("v" + texto(i), i)
+        alias = identidad(t)
+        t = t
+        si i % 2 == 0
+            texto(i)
+            i = i + 1
+            continuar
+        fin
+        i = i + 1
+    fin
+    imprimir(t, alias)
+    retornar alias
+fin
+'@ 'v19991999 v19991999' -VerificarMemoria
+
+ProbarSalida 'memoria-recursion' @'
+funcion rec(n: entero) -> texto
+    si n == 0
+        retornar texto(0)
+    fin
+    s = "x" + texto(n)
+    retornar s + rec(n - 1)
+fin
+funcion principal()
+    imprimir(rec(3))
+fin
+'@ 'x3x2x10' -VerificarMemoria
+
+ProbarSalida 'orden-evaluacion' @'
+funcion marca(n: entero) -> entero
+    imprimir(n)
+    retornar n
+fin
+funcion juntar(a: entero, b: entero) -> entero
+    retornar a * 10 + b
+fin
+funcion principal()
+    imprimir(marca(1) + marca(2))
+    imprimir(juntar(marca(3), marca(4)))
+    imprimir(marca(5), juntar(marca(6), marca(7)))
+    imprimir(texto(marca(8)) + texto(marca(9)))
+fin
+'@ "1`n2`n3`n3`n4`n34`n5`n6`n7`n5 67`n8`n9`n89"
+
+ProbarSalida 'cortocircuito-bucle' @'
+funcion marca(n: entero) -> logico
+    imprimir(n)
+    retornar verdadero
+fin
+funcion limite(n: entero) -> logico
+    imprimir(n)
+    retornar n < 2
+fin
+funcion principal()
+    imprimir(falso && marca(99), verdadero || marca(98))
+    imprimir(verdadero && marca(1), falso || marca(2))
+    i = 0
+    mientras limite(i)
+        i = i + 1
+    fin
+fin
+'@ "falso verdadero`n1`n2`nverdadero verdadero`n0`n1`n2"
+
+ProbarSalida 'temporales-recursion' @'
+funcion factorial(n: entero) -> entero
+    si n <= 1
+        retornar 1
+    fin
+    retornar n * factorial(n - 1)
+fin
+funcion principal()
+    imprimir(factorial(6), factorial(3) + factorial(4))
+fin
+'@ '720 30'
+
+function ProbarErrorRuntime([string]$Nombre, [string]$Cuerpo, [string]$Diagnostico) {
+    $archivo = Guardar ($Nombre + '.alma') "funcion principal()`n$Cuerpo`nfin`n"
+    $r = Invocar @('ejecutar', $archivo)
+    Comprobar ($r.Codigo -eq 1 -and $r.Texto.Contains($Diagnostico)) "Intérprete: $Nombre : $($r.Texto)"
+    $r = Invocar @('compilar', $archivo)
+    Comprobar ($r.Codigo -eq 0) "Compilación: $Nombre : $($r.Texto)"
+    $binario = Join-Path $casos ($Nombre + '.exe')
+    $salida = & $binario 2>&1
+    $codigo = $LASTEXITCODE
+    Comprobar ($codigo -eq 1 -and ($salida | Out-String).Contains($Diagnostico)) "Runtime nativo: $Nombre : $salida"
+}
+
+# Variables sin anotación: estos errores deben detectarse también en runtime.
+ProbarErrorRuntime 'texto-numero' "    a = `"hola`"`n    b = 1`n    imprimir(a + b)" 'números'
+ProbarErrorRuntime 'decimal-cero' "    a = 1.5`n    b = 0.0`n    imprimir(a / b)" 'cero'
+ProbarErrorRuntime 'modulo-decimal' "    a = 1.5`n    b = 2`n    imprimir(a % b)" 'enteros'
+ProbarErrorRuntime 'condicion-numero' "    a = 1`n    si a`n        imprimir(42)`n    fin" 'lógic'
+ProbarErrorRuntime 'negacion-texto' "    a = `"hola`"`n    imprimir(-a)" 'número'
+ProbarErrorRuntime 'suma-overflow' "    a = 9223372036854775807`n    imprimir(a + 1)" 'desbordamiento'
+ProbarErrorRuntime 'resta-overflow' "    a = -9223372036854775807 - 1`n    imprimir(a - 1)" 'desbordamiento'
+ProbarErrorRuntime 'producto-overflow' "    a = 9223372036854775807`n    imprimir(a * 2)" 'desbordamiento'
+ProbarErrorRuntime 'division-overflow' "    a = -9223372036854775807 - 1`n    imprimir(a / -1)" 'desbordamiento'
+ProbarErrorRuntime 'negacion-overflow' "    a = -9223372036854775807 - 1`n    imprimir(-a)" 'desbordamiento'
+ProbarErrorRuntime 'variable-no-inicializada' "    si falso`n        a = 1`n    fin`n    imprimir(a)" 'variable no definida'
+
+[void](Guardar 'modulo-error.alma' "funcion fallar()`n    imprimir(1 / 0)`nfin`n")
+$entradaError = Guardar 'entrada-error.alma' "importar fallar desde `"modulo-error`"`nfuncion principal()`n    fallar()`nfin`n"
+$r = Invocar @('ejecutar', $entradaError)
+Comprobar ($r.Codigo -eq 1 -and $r.Texto.Contains('modulo-error.alma:2:')) 'El intérprete perdió el archivo de origen'
+$r = Invocar @('compilar', $entradaError)
+Comprobar ($r.Codigo -eq 0) $r.Texto
+$salidaError = & (Join-Path $casos 'entrada-error.exe') 2>&1
+$codigoError = $LASTEXITCODE
+Comprobar ($codigoError -eq 1 -and ($salidaError | Out-String).Contains('modulo-error.alma:2:')) 'El nativo perdió el archivo de origen'
+[void](Guardar 'modulo-error.alma' "funcion fallar()`n    imprimir(desconocido)`nfin`n")
+$r = Invocar @('analizar', $entradaError)
+Comprobar ($r.Codigo -eq 1 -and $r.Texto.Contains('modulo-error.alma:2:')) 'El analizador perdió el archivo de origen'
 
 $sinZig = Guardar 'sin-zig.alma' "funcion principal()`n    imprimir(42)`nfin`n"
 $rutaAnterior = $env:PATH

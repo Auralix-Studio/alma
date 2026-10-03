@@ -10,4 +10,5 @@ test {
     _ = @import("semantica/analizador.zig");
     _ = @import("paquete.zig");
     _ = @import("codegen_c.zig");
+    _ = @import("codegen_pe.zig");
 }

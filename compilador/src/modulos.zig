@@ -58,19 +58,29 @@ const Cargador = struct {
             std.debug.print("No se pudo leer '{s}': {s}\n", .{ ruta, @errorName(err) });
             return error.ErrorCarga;
         };
-        try self.prog.fuentes.append(self.gpa, fuente);
+        self.prog.fuentes.append(self.gpa, fuente) catch |err| {
+            self.gpa.free(fuente);
+            return err;
+        };
 
         const tokens = try lexer.tokenizar(self.gpa, fuente);
         defer self.gpa.free(tokens); // el AST referencia la fuente, no los tokens
 
         const p = try self.gpa.create(parser.Parser);
         p.* = parser.Parser.init(self.gpa, tokens);
-        try self.prog.parsers.append(self.gpa, p);
+        self.prog.parsers.append(self.gpa, p) catch |err| {
+            p.deinit();
+            self.gpa.destroy(p);
+            return err;
+        };
 
-        return p.parsePrograma() catch {
+        const stmts = p.parsePrograma() catch {
             if (p.diag) |d| std.debug.print("{s}:{d}:{d}: error de sintaxis: {s}\n", .{ ruta, d.linea, d.columna, d.mensaje });
             return error.ErrorCarga;
         };
+        const archivo = try p.arena.allocator().dupe(u8, ruta);
+        ast.asignarArchivo(stmts, archivo);
+        return stmts;
     }
 
     /// Carga las dependencias (`importar … desde`) de un programa ya parseado.

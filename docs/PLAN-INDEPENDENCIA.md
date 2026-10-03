@@ -25,8 +25,9 @@ arquitectura requiere soporte explícito; no se promete compatibilidad universal
   dos motores. Las comparaciones mixtas entero/decimal siguen convirtiendo a decimal.
 - `pruebas-cli.ps1` comprueba procesos reales, módulos y concordancia de resultados.
 
-`alma compilar` TODAVÍA utiliza `zig cc`. Esta etapa prepara la base; no implementa
-un generador de código máquina ni autohospedaje.
+Por defecto `alma compilar` utiliza `zig cc`. Ya existe un generador propio experimental
+con `alma compilar archivo.alma --backend=propio`, descrito en la especificación 07.
+El autohospedaje todavía está pendiente.
 
 ## Etapas y criterios de aceptación
 
@@ -55,10 +56,55 @@ un generador de código máquina ni autohospedaje.
 ## Deuda conocida
 
 El intérprete conserva memoria en una arena hasta finalizar; no implementa ARC.
-El runtime C no libera sus textos dinámicos. Hay diferencias pendientes en tipos,
-división decimal por cero y orden de evaluación. Async es síncrono. Los diagnósticos
-de módulos necesitan conservar el archivo de origen de cada nodo. Estas limitaciones
+El runtime C ya libera textos dinámicos mediante conteo de referencias, pero todavía
+no compila objetos y colecciones. Hay diferencias pendientes en formato decimal y
+otros aspectos de tipos/ámbitos. Async es síncrono. Estas limitaciones
 impiden presentar la versión actual como estable o de consumo acotado.
+
+## Segunda mejora: errores del runtime y aritmética
+
+- El runtime C valida que las operaciones numéricas reciban números, que las
+  condiciones reciban lógicos y que `%` reciba enteros. La concatenación requiere
+  dos textos; convertir números a texto requiere `texto(...)` explícito.
+- La división por cero falla también con decimales, como en el intérprete.
+- Los operadores de suma, resta, producto, división y negación de enteros detectan
+  desbordamiento en ambos motores. El intérprete lo expone como error capturable;
+  el runtime nativo termina con código 1 (todavía no compila `intentar`).
+- La división entera trunca hacia cero. El resto conserva el signo del dividendo;
+  `minimo_i64 % -1` vale cero sin ejecutar una división que desborde.
+- Imprimir números en el runtime C ya no reserva textos temporales. Las reservas
+  para `texto(...)` y concatenación comprueban fallos, pero siguen pendientes de
+  gestión de vida útil: esto todavía no constituye una solución completa de memoria.
+
+El backend C usa operaciones comprobadas de su compilador de construcción; el
+futuro backend propio deberá implementar el mismo contrato y pasar estas pruebas.
+
+## Tercera mejora: evaluación ordenada y salida inmediata
+
+- El backend baja operandos y argumentos a temporales locales de cada función.
+  Evalúa de izquierda a derecha mediante secuencias explícitas de C, sin depender
+  del orden de evaluación que el compilador C elija para los argumentos.
+- `&&` y `||` conservan el cortocircuito. Los temporales se recalculan al evaluar
+  condiciones de bucles y cada llamada recursiva tiene sus propios temporales.
+- El CLI conecta el intérprete a un destino de salida inmediato. El intérprete
+  conserva el modo de captura por defecto para pruebas y uso embebido.
+- El búfer de salida se reutiliza después de cada impresión; los fallos del destino
+  producen un error de Alma y no provocan reenvíos automáticos del texto.
+- El formato numérico del intérprete y de JSON usa memoria temporal en stack,
+  evitando reservas en la arena para cada número. Una prueba comprueba que imprimir
+  repetidamente el mismo número no aumenta la capacidad de la arena tras calentamiento.
+
+Esto reduce retención por salida, pero no resuelve todavía las asignaciones de
+argumentos, objetos ni textos persistentes del intérprete.
+
+## Cuarta mejora: IR, textos nativos y backend independiente
+
+La compilación ya pasa por una IR propia, sin AST ni C incrustados. Ambos backends
+consumen esa IR. El backend C retiene/libera textos dinámicos; el backend propio emite
+código máquina x64 y PE32+ sin herramientas externas para un subconjunto escalar.
+Se añadió `alma ir`, diagnóstico de archivo de origen en módulos y verificaciones
+de memoria. El detalle y los límites están en
+[IR y backend propio](especificacion/07-ir-y-backend-propio.md).
 
 ## Verificación local (Windows)
 
@@ -68,7 +114,14 @@ Con Zig 0.16 accesible en el PATH, desde `compilador`:
 zig build test
 zig build
 ./pruebas-cli.ps1
+./pruebas-propio.ps1
 ```
 
 Las pruebas CLI conservan sus casos generados bajo `.zig-cache/pruebas-cli` para
 inspección. No requieren red ni modifican instalaciones del usuario.
+
+Verificado el 2026-10-02 en Windows: construcción del CLI, 91 pruebas unitarias,
+80 comprobaciones CLI con backend C (`-O2`) y 48 comprobaciones del backend propio
+sin herramientas externas en el PATH.
+En la primera etapa también se verificó el análisis semántico de todos los ejemplos.
+Estas comprobaciones no certifican las características aún pendientes.

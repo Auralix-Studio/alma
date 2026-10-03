@@ -1,7 +1,7 @@
 # Instalar Alma
 
 El CLI de Alma es un **binario autocontenido**: no necesitás instalar Zig ni ninguna
-dependencia. Estos scripts lo copian a una carpeta de tu usuario y lo dejan en el `PATH`.
+dependencia para ejecutar programas interpretados. `alma compilar --backend=c` requiere Zig en el PATH. El backend experimental propio (`alma compilar archivo.alma --backend=propio`) produce ejecutables Windows x64 sin compilador externo; consulta sus límites en [la especificación](../docs/especificacion/07-ir-y-backend-propio.md). Estos scripts lo copian a una carpeta de tu usuario y lo dejan en el `PATH`.
 
 ## 1. Descargá el binario para tu sistema
 - **Windows x64:** `alma-windows-x64.exe`

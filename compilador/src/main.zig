@@ -20,6 +20,8 @@ const analizador = @import("semantica/analizador.zig");
 const modulos = @import("modulos.zig");
 const paquete = @import("paquete.zig");
 const codegen_c = @import("codegen_c.zig");
+const codegen_pe = @import("codegen_pe.zig");
+const ir = @import("ir.zig");
 const builtin = @import("builtin");
 
 const VERSION = "0.1.0";
@@ -69,7 +71,15 @@ fn ejecutarCli(init: process.Init.Minimal) !void {
         try cmdAnalizar(io, gpa, ruta);
     } else if (esIgual(comando, "compilar")) {
         const ruta = try requiereRuta(args, "compilar");
-        try cmdCompilar(io, gpa, ruta);
+        const backend = if (args.len >= 4) args[3] else "--backend=c";
+        if (args.len > 4 or (!esIgual(backend, "--backend=c") and !esIgual(backend, "--backend=propio"))) {
+            std.debug.print("Uso: alma compilar <archivo.alma> [--backend=c|--backend=propio]\n", .{});
+            return error.BackendInvalido;
+        }
+        try cmdCompilar(io, gpa, ruta, esIgual(backend, "--backend=propio"));
+    } else if (esIgual(comando, "ir")) {
+        const ruta = try requiereRuta(args, "ir");
+        try cmdIr(io, gpa, ruta);
     } else if (esIgual(comando, "nuevo")) {
         if (args.len < 3) {
             std.debug.print("Uso: alma nuevo <nombre>\n", .{});
@@ -123,13 +133,17 @@ fn cmdEjecutar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
     var interp = try interprete.Interprete.init(gpa);
     defer interp.deinit();
     interp.io = io; // habilita el módulo `sistema` (archivos)
+    var salida_io = io;
+    interp.destino_salida = .{ .contexto = &salida_io, .escribir = enviarSalida };
     interp.ejecutar(prog.stmts) catch |err| {
-        if (interp.diag) |d| std.debug.print("{s}:{d}:{d}: error de ejecución: {s}\n", .{ ruta, interp.diag_pos.linea, interp.diag_pos.columna, d });
-        try escribir(io, interp.textoSalida());
+        if (interp.diag) |d| std.debug.print("{s}:{d}:{d}: error de ejecución: {s}\n", .{ interp.diag_pos.archivo orelse ruta, interp.diag_pos.linea, interp.diag_pos.columna, d });
         return err;
     };
+}
 
-    try escribir(io, interp.textoSalida());
+fn enviarSalida(contexto: *anyopaque, bytes: []const u8) anyerror!void {
+    const io: *std.Io = @ptrCast(@alignCast(contexto));
+    try escribir(io.*, bytes);
 }
 
 fn cmdTokens(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
@@ -164,7 +178,7 @@ fn cmdAst(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
     std.debug.print("{s}\n", .{arbol});
 }
 
-fn cmdCompilar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
+fn cmdCompilar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8, propio: bool) !void {
     var arena_st = std.heap.ArenaAllocator.init(gpa);
     defer arena_st.deinit();
     const arena = arena_st.allocator();
@@ -172,6 +186,24 @@ fn cmdCompilar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
     var prog = try modulos.construir(gpa, io, ruta);
     defer prog.deinit();
     try validarPrograma(gpa, ruta, prog.stmts);
+    if (propio) {
+        var intermedia = try ir.construir(gpa, prog.stmts);
+        defer intermedia.deinit();
+        if (intermedia.diag) |diag| {
+            std.debug.print("No se puede compilar: {s}\n", .{diag});
+            return error.ConstruccionNoSoportada;
+        }
+        const resultado = try codegen_pe.generar(arena, &intermedia);
+        const ejecutable = resultado.ejecutable orelse {
+            std.debug.print("Backend propio: {s}\n", .{resultado.diag orelse "programa no soportado"});
+            return error.ConstruccionNoSoportada;
+        };
+        const destino = try std.fmt.allocPrint(arena, "{s}.exe", .{sinExtension(ruta)});
+        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = destino, .data = ejecutable });
+        const mensaje = try std.fmt.allocPrint(arena, "Compilado con backend propio Windows x64: {s}\n", .{destino});
+        try escribir(io, mensaje);
+        return;
+    }
     const gen = try codegen_c.generar(arena, prog.stmts);
     const fuente_c = gen.fuente_c orelse {
         std.debug.print("No se puede compilar todavía: {s}\n(por ahora, ese programa se ejecuta con 'alma ejecutar')\n", .{gen.diag orelse "construcción no soportada"});
@@ -212,6 +244,22 @@ fn cmdCompilar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
     try escribir(io, msg);
 }
 
+fn cmdIr(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
+    var prog = try modulos.construir(gpa, io, ruta);
+    defer prog.deinit();
+    try validarPrograma(gpa, ruta, prog.stmts);
+    var intermedia = try ir.construir(gpa, prog.stmts);
+    defer intermedia.deinit();
+    if (intermedia.diag) |diag| {
+        std.debug.print("No se puede generar IR: {s}\n", .{diag});
+        return error.ConstruccionNoSoportada;
+    }
+    const texto = try ir.escribir(gpa, &intermedia);
+    defer gpa.free(texto);
+    try escribir(io, texto);
+    try escribir(io, "\n");
+}
+
 fn sinExtension(ruta: []const u8) []const u8 {
     const punto = std.mem.lastIndexOfScalar(u8, ruta, '.') orelse return ruta;
     if (std.mem.lastIndexOfAny(u8, ruta, "/\\")) |sep| {
@@ -236,7 +284,7 @@ fn validarPrograma(gpa: std.mem.Allocator, ruta: []const u8, stmts: []const ast.
         return;
     }
     for (diags) |d| {
-        std.debug.print("{s}:{d}:{d}: {s}\n", .{ ruta, d.pos.linea, d.pos.columna, d.mensaje });
+        std.debug.print("{s}:{d}:{d}: {s}\n", .{ d.pos.archivo orelse ruta, d.pos.linea, d.pos.columna, d.mensaje });
     }
     std.debug.print("{d} problema(s) encontrado(s) en {s}.\n", .{ diags.len, ruta });
     return error.AnalisisFallido;
@@ -409,10 +457,12 @@ fn imprimirAyuda(io: std.Io) !void {
         \\  nuevo    <nombre>         Crea un proyecto nuevo.
         \\  ejecutar <archivo.alma>   Compila al vuelo y ejecuta el programa.
         \\  compilar <archivo.alma>   Compila a un binario nativo (subconjunto; requiere zig cc).
+        \\    --backend=propio      Backend experimental Windows x64, sin compilador externo.
         \\  analizar <archivo.alma>   Revisa el código en busca de errores (linter).
         \\  paquete  <validar|info>   Valida el manifiesto alma.paquete.
         \\  tokens   <archivo.alma>   Muestra el flujo de tokens (desarrollo).
         \\  ast      <archivo.alma>   Muestra el AST del programa (desarrollo).
+        \\  ir       <archivo.alma>   Muestra la IR escalar en JSON (desarrollo).
         \\  version                   Muestra la versión de Alma.
         \\  ayuda                     Muestra esta ayuda.
         \\

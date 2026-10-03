@@ -168,9 +168,16 @@ const Entorno = struct {
 // — Intérprete —
 
 pub const Interprete = struct {
+    pub const DestinoSalida = struct {
+        contexto: *anyopaque,
+        escribir: *const fn (*anyopaque, []const u8) anyerror!void,
+    };
+
     arena: std.heap.ArenaAllocator,
     global: *Entorno,
     salida: Buffer = .empty,
+    /// null captura la salida para pruebas; un destino la recibe al imprimir.
+    destino_salida: ?DestinoSalida = null,
     diag: ?[]const u8 = null,
     /// Posición de la sentencia en ejecución (para reportar errores con línea/columna).
     stmt_pos: ast.Pos = .{},
@@ -703,7 +710,7 @@ pub const Interprete = struct {
         const v = try self.evalExpr(u.operando, env);
         switch (u.op) {
             .menos => return switch (v) {
-                .entero => |n| .{ .entero = -n },
+                .entero => |n| if (n == std.math.minInt(i64)) self.fallar("desbordamiento de entero", .{}) else .{ .entero = -n },
                 .decimal => |d| .{ .decimal = -d },
                 else => self.fallar("la negación aritmética requiere un número", .{}),
             },
@@ -782,11 +789,11 @@ pub const Interprete = struct {
             const x = izq.entero;
             const y = der.entero;
             return switch (op) {
-                .mas => .{ .entero = x + y },
-                .menos => .{ .entero = x - y },
-                .por => .{ .entero = x * y },
-                .entre => if (y == 0) self.fallar("división por cero", .{}) else .{ .entero = @divTrunc(x, y) },
-                .modulo => if (y == 0) self.fallar("módulo por cero", .{}) else .{ .entero = @rem(x, y) },
+                .mas => self.enteroComprobado(@addWithOverflow(x, y)),
+                .menos => self.enteroComprobado(@subWithOverflow(x, y)),
+                .por => self.enteroComprobado(@mulWithOverflow(x, y)),
+                .entre => if (y == 0) self.fallar("división por cero", .{}) else if (x == std.math.minInt(i64) and y == -1) self.fallar("desbordamiento de entero", .{}) else .{ .entero = @divTrunc(x, y) },
+                .modulo => if (y == 0) self.fallar("módulo por cero", .{}) else if (x == std.math.minInt(i64) and y == -1) .{ .entero = 0 } else .{ .entero = @rem(x, y) },
                 else => self.fallar("operador binario no soportado: {s}", .{@tagName(op)}),
             };
         } else {
@@ -801,6 +808,11 @@ pub const Interprete = struct {
                 else => self.fallar("operador binario no soportado: {s}", .{@tagName(op)}),
             };
         }
+    }
+
+    fn enteroComprobado(self: *Interprete, resultado: struct { i64, u1 }) ErrorEjec!Valor {
+        if (resultado[1] != 0) return self.fallar("desbordamiento de entero", .{});
+        return .{ .entero = resultado[0] };
     }
 
     fn evalLlamada(self: *Interprete, l: Expr.Llamada, env: *Entorno) ErrorEjec!Valor {
@@ -842,8 +854,16 @@ pub const Interprete = struct {
     fn formatearValor(self: *Interprete, out: *Buffer, v: Valor) ErrorEjec!void {
         switch (v) {
             .nulo => try out.appendSlice(self.a(), "nulo"),
-            .entero => |n| try out.appendSlice(self.a(), try std.fmt.allocPrint(self.a(), "{d}", .{n})),
-            .decimal => |d| try out.appendSlice(self.a(), try std.fmt.allocPrint(self.a(), "{d}", .{d})),
+            .entero => |n| {
+                var temporal: [32]u8 = undefined;
+                const bytes = std.fmt.bufPrint(&temporal, "{d}", .{n}) catch return self.fallar("no se pudo formatear el entero", .{});
+                try out.appendSlice(self.a(), bytes);
+            },
+            .decimal => |d| {
+                var temporal: [512]u8 = undefined;
+                const bytes = std.fmt.bufPrint(&temporal, "{d}", .{d}) catch return self.fallar("no se pudo formatear el decimal", .{});
+                try out.appendSlice(self.a(), bytes);
+            },
             .texto => |s| try out.appendSlice(self.a(), s),
             .logico => |b| try out.appendSlice(self.a(), if (b) "verdadero" else "falso"),
             .funcion => try out.appendSlice(self.a(), "<funcion>"),
@@ -912,6 +932,11 @@ fn nativaImprimir(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
         try interp.formatearValor(&interp.salida, arg);
     }
     try interp.salida.append(interp.a(), '\n');
+    if (interp.destino_salida) |destino| {
+        defer interp.salida.clearRetainingCapacity();
+        destino.escribir(destino.contexto, interp.salida.items) catch
+            return interp.fallar("no se pudo escribir la salida", .{});
+    }
     return .nulo;
 }
 
@@ -1316,8 +1341,7 @@ fn jsonEscribirCadena(interp: *Interprete, out: *Buffer, s: []const u8) ErrorEje
 fn jsonEscribir(interp: *Interprete, out: *Buffer, v: Valor) ErrorEjec!void {
     switch (v) {
         .nulo => try out.appendSlice(interp.a(), "null"),
-        .entero => |n| try out.appendSlice(interp.a(), try std.fmt.allocPrint(interp.a(), "{d}", .{n})),
-        .decimal => |d| try out.appendSlice(interp.a(), try std.fmt.allocPrint(interp.a(), "{d}", .{d})),
+        .entero, .decimal => try interp.formatearValor(out, v),
         .logico => |b| try out.appendSlice(interp.a(), if (b) "true" else "false"),
         .texto => |s| try jsonEscribirCadena(interp, out, s),
         .lista => |lst| {
@@ -1434,6 +1458,44 @@ test "imprimir texto" {
     try esperarSalida("imprimir(\"hola\")", "hola\n");
 }
 
+test "destino de salida recibe cada impresion sin acumular historial" {
+    const Receptor = struct {
+        llamadas: usize = 0,
+        fn escribir(ctx: *anyopaque, bytes: []const u8) anyerror!void {
+            const self: *@This() = @ptrCast(@alignCast(ctx));
+            try std.testing.expectEqualStrings("42\n", bytes);
+            self.llamadas += 1;
+        }
+    };
+    var receptor = Receptor{};
+    var interp = try Interprete.init(std.testing.allocator);
+    defer interp.deinit();
+    interp.destino_salida = .{ .contexto = &receptor, .escribir = Receptor.escribir };
+    _ = try nativaImprimir(&interp, &.{.{ .entero = 42 }});
+    const capacidad_inicial = interp.arena.queryCapacity();
+    for (0..100) |_| {
+        _ = try nativaImprimir(&interp, &.{.{ .entero = 42 }});
+        try std.testing.expectEqual(@as(usize, 0), interp.textoSalida().len);
+    }
+    try std.testing.expectEqual(@as(usize, 101), receptor.llamadas);
+    try std.testing.expectEqual(capacidad_inicial, interp.arena.queryCapacity());
+}
+
+test "fallo del destino se propaga sin conservar salida para reintento" {
+    const Receptor = struct {
+        fn escribir(_: *anyopaque, _: []const u8) anyerror!void {
+            return error.DestinoCerrado;
+        }
+    };
+    var contexto: u8 = 0;
+    var interp = try Interprete.init(std.testing.allocator);
+    defer interp.deinit();
+    interp.destino_salida = .{ .contexto = &contexto, .escribir = Receptor.escribir };
+    try std.testing.expectError(error.ErrorEjecucion, nativaImprimir(&interp, &.{.{ .entero = 42 }}));
+    try std.testing.expectEqualStrings("no se pudo escribir la salida", interp.diag.?);
+    try std.testing.expectEqual(@as(usize, 0), interp.textoSalida().len);
+}
+
 test "comparaciones enteras conservan precision por encima de 2^53" {
     const src =
         \\a = 9007199254740992
@@ -1442,6 +1504,31 @@ test "comparaciones enteras conservan precision por encima de 2^53" {
         \\imprimir(-b < -a, -b == -a)
     ;
     try esperarSalida(src, "falso verdadero verdadero verdadero falso falso\nverdadero falso\n");
+}
+
+test "desbordamientos aritmeticos son errores de Alma" {
+    var interp = try Interprete.init(std.testing.allocator);
+    defer interp.deinit();
+    const max = Valor{ .entero = std.math.maxInt(i64) };
+    const min = Valor{ .entero = std.math.minInt(i64) };
+    try std.testing.expectError(error.ErrorEjecucion, interp.aplicarBinario(.mas, max, .{ .entero = 1 }));
+    try std.testing.expectError(error.ErrorEjecucion, interp.aplicarBinario(.menos, min, .{ .entero = 1 }));
+    try std.testing.expectError(error.ErrorEjecucion, interp.aplicarBinario(.por, max, .{ .entero = 2 }));
+    try std.testing.expectError(error.ErrorEjecucion, interp.aplicarBinario(.entre, min, .{ .entero = -1 }));
+    try std.testing.expectEqualStrings("desbordamiento de entero", interp.diag.?);
+    const resto = try interp.aplicarBinario(.modulo, min, .{ .entero = -1 });
+    try std.testing.expectEqual(@as(i64, 0), resto.entero);
+}
+
+test "negacion del entero minimo se puede capturar" {
+    try esperarSalida(
+        \\minimo = -9223372036854775807 - 1
+        \\intentar
+        \\    imprimir(-minimo)
+        \\capturar (e)
+        \\    imprimir(e.mensaje)
+        \\fin
+    , "desbordamiento de entero\n");
 }
 
 test "aritmética con precedencia" {

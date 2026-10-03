@@ -40,7 +40,9 @@ fin
 > ni conteo de referencias. La diferencia observable actual es copia frente a alias.
 
 **Dirección del proyecto:** construir un backend propio y, posteriormente, un compilador
-escrito en Alma. Zig sigue siendo la herramienta inicial y `alma compilar` todavía
+escrito en Alma. Zig sigue siendo la herramienta de construcción inicial.
+`alma compilar archivo.alma --backend=propio` ya genera ejecutables Windows x64
+sin compilador externo para un subconjunto experimental. El backend C, predeterminado,
 requiere `zig cc`. Véase el [plan de independencia](docs/PLAN-INDEPENDENCIA.md).
 
 ---
@@ -88,7 +90,7 @@ zig build test                  # pruebas unitarias
 | **Módulos** | Programas multi-archivo con `importar SIMBOLO desde "ruta"` |
 | **Paquetes** | Manifiesto `alma.paquete` + `alma paquete validar` |
 | **Análisis** | `alma analizar` detecta errores antes de ejecutar: nombres, aridad, contexto, constantes, y **chequeo de tipos gradual** |
-| **Compilación nativa** | `alma compilar` → binario nativo autónomo (subconjunto, vía `zig cc`) |
+| **Compilación nativa** | Backend C vía `zig cc` y backend propio experimental Windows x64 con `--backend=propio` |
 | **CLI** | `alma nuevo`, `alma ejecutar`, `alma compilar`, `alma analizar`, `alma paquete`, `alma tokens`, `alma ast` |
 | **Editor** | Extensión de VS Code con resaltado de sintaxis |
 
@@ -96,7 +98,7 @@ zig build test                  # pruebas unitarias
 backend LLVM directo. Hoy el lenguaje completo corre con un **intérprete tree-walking**
 (`alma ejecutar`); `alma compilar` ya genera **binarios nativos** para un subconjunto (vía
 `zig cc`). Async se resuelve de forma **cooperativa/síncrona**; el
-paralelismo real y un backend nativo propio sin compilador externo son parte del roadmap.
+paralelismo real y la ampliación del backend propio son parte del roadmap.
 
 ---
 
@@ -120,6 +122,10 @@ devuelven código de salida 1. `compilar` carga funciones de otros archivos Alma
 que sus definiciones pertenezcan al subconjunto nativo soportado.
 
 Comandos oficiales aún no implementados: `formatear`, `probar`, `doc`, `lsp`.
+
+`alma ir archivo.alma` muestra la representación intermedia en JSON. Consultá
+[IR y backend propio](docs/especificacion/07-ir-y-backend-propio.md) para los límites
+de cada backend y las pruebas de compilación sin Zig.
 
 ---
 

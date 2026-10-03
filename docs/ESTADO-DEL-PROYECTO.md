@@ -1,5 +1,9 @@
 # Estado del proyecto Alma — documento de traspaso
 
+> Snapshot histórico de julio de 2026. Para los cambios del 2 de octubre y la dirección
+> vigente, consultar [PLAN-INDEPENDENCIA.md](PLAN-INDEPENDENCIA.md). Las rutas,
+> cantidades de pruebas y propuestas de backend siguientes pueden estar desactualizadas.
+
 Snapshot completo para retomar el trabajo en cualquier sesión nueva. **Todo el código,
 docs y binarios están en disco** bajo `C:\Users\aless\Desktop\Alma-Codex`.
 

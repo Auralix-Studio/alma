@@ -10,7 +10,31 @@ const TipoToken = tk.TipoToken;
 
 /// Posición en el código fuente (base 1). Se adjunta a cada sentencia para
 /// producir diagnósticos con línea/columna.
-pub const Pos = struct { linea: usize = 0, columna: usize = 0 };
+pub const Pos = struct { linea: usize = 0, columna: usize = 0, archivo: ?[]const u8 = null };
+
+/// Adjunta el archivo del parser a todos los bloques, incluidos métodos.
+pub fn asignarArchivo(stmts: []Stmt, archivo: []const u8) void {
+    for (stmts) |*s| {
+        s.pos.archivo = archivo;
+        switch (s.dato) {
+            .funcion => |f| asignarArchivo(f.cuerpo, archivo),
+            .modelo => |m| for (m.metodos) |metodo| {
+                asignarArchivo(metodo.cuerpo, archivo);
+            },
+            .si => |sif| {
+                for (sif.ramas) |r| asignarArchivo(r.cuerpo, archivo);
+                if (sif.sino) |c| asignarArchivo(c, archivo);
+            },
+            .mientras => |m| asignarArchivo(m.cuerpo, archivo),
+            .para => |p| asignarArchivo(p.cuerpo, archivo),
+            .intentar => |t| {
+                asignarArchivo(t.cuerpo, archivo);
+                asignarArchivo(t.captura, archivo);
+            },
+            else => {},
+        }
+    }
+}
 
 // — Expresiones —
 
