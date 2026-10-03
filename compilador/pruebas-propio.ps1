@@ -16,7 +16,11 @@ function Invocar([string]$Binario, [string[]]$Argumentos) {
     $inicio.RedirectStandardError = $true
     $inicio.StandardOutputEncoding = [Text.Encoding]::UTF8
     $inicio.StandardErrorEncoding = [Text.Encoding]::UTF8
-    foreach ($argumento in $Argumentos) { $inicio.ArgumentList.Add($argumento) }
+    if ($null -ne $inicio.ArgumentList) {
+        foreach ($argumento in $Argumentos) { $inicio.ArgumentList.Add($argumento) }
+    } else {
+        $inicio.Arguments = ($Argumentos | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join ' '
+    }
     $proceso = [Diagnostics.Process]::new()
     $proceso.StartInfo = $inicio
     try {
