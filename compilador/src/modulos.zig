@@ -44,7 +44,8 @@ const Cargador = struct {
     prog: *Programa,
     arena: std.heap.ArenaAllocator,
     defs: std.ArrayListUnmanaged(ast.Stmt) = .empty,
-    cargados: std.StringHashMapUnmanaged(void) = .empty,
+    cargados: std.StringHashMapUnmanaged(enum { cargando, cargado }) = .empty,
+    pila: std.ArrayListUnmanaged([]const u8) = .empty,
 
     fn a(self: *Cargador) std.mem.Allocator {
         return self.arena.allocator();
@@ -89,7 +90,7 @@ const Cargador = struct {
             switch (s.dato) {
                 .importar => |imp| if (imp.desde) |desde| {
                     const ruta = try self.rutaModulo(dir, desde);
-                    try self.cargarModulo(ruta);
+                    try self.cargarModulo(ruta, s.pos);
                 },
                 else => {},
             }
@@ -98,9 +99,11 @@ const Cargador = struct {
 
     /// Carga un módulo (si no está cargado): primero sus dependencias, luego acumula
     /// sus definiciones (funcion/estructura/modelo).
-    fn cargarModulo(self: *Cargador, ruta: []const u8) Err!void {
-        if (self.cargados.contains(ruta)) return;
-        try self.cargados.put(self.a(), ruta, {});
+    fn cargarModulo(self: *Cargador, ruta: []const u8, pos: ast.Pos) Err!void {
+        if (try self.visitado(ruta, pos)) return;
+        try self.cargados.put(self.a(), ruta, .cargando);
+        try self.pila.append(self.a(), ruta);
+        defer self.pila.items.len -= 1;
 
         const programa = try self.parseArchivo(ruta);
         try self.cargarDeps(dirname(ruta), programa);
@@ -110,6 +113,23 @@ const Cargador = struct {
                 else => {},
             }
         }
+        try self.cargados.put(self.a(), ruta, .cargado);
+    }
+
+    fn visitado(self: *Cargador, ruta: []const u8, pos: ast.Pos) Err!bool {
+        const estado = self.cargados.get(ruta) orelse return false;
+        if (estado == .cargado) return true;
+        std.debug.print("{s}:{d}:{d}: ciclo de importación: ", .{ pos.archivo orelse ruta, pos.linea, pos.columna });
+        for (self.pila.items) |p| std.debug.print("{s} -> ", .{p});
+        std.debug.print("{s}\n", .{ruta});
+        return error.ErrorCarga;
+    }
+
+    fn canonicalizar(self: *Cargador, ruta: []const u8) Err![]const u8 {
+        return std.Io.Dir.cwd().realPathFileAlloc(self.io, ruta, self.a()) catch |err| {
+            std.debug.print("No se pudo resolver '{s}': {s}\n", .{ ruta, @errorName(err) });
+            return error.ErrorCarga;
+        };
     }
 
     fn rutaModulo(self: *Cargador, dir: []const u8, desde_lex: []const u8) Err![]const u8 {
@@ -119,10 +139,9 @@ const Cargador = struct {
         else
             desde_lex;
         const ext = if (std.mem.endsWith(u8, desde, ".alma")) "" else ".alma";
-        if (dir.len == 0 or std.mem.eql(u8, dir, ".")) {
-            return std.fmt.allocPrint(self.a(), "{s}{s}", .{ desde, ext });
-        }
-        return std.fmt.allocPrint(self.a(), "{s}/{s}{s}", .{ dir, desde, ext });
+        const archivo = try std.fmt.allocPrint(self.a(), "{s}{s}", .{ desde, ext });
+        const ruta = if (std.fs.path.isAbsolute(archivo)) archivo else try std.fs.path.join(self.a(), &.{ dir, archivo });
+        return self.canonicalizar(ruta);
     }
 };
 
@@ -144,8 +163,12 @@ pub fn construir(gpa: std.mem.Allocator, io: std.Io, ruta_entrada: []const u8) !
     var c = Cargador{ .gpa = gpa, .io = io, .prog = &prog, .arena = std.heap.ArenaAllocator.init(gpa) };
     defer c.arena.deinit();
 
-    const entrada = try c.parseArchivo(ruta_entrada);
-    try c.cargarDeps(dirname(ruta_entrada), entrada);
+    const ruta = try c.canonicalizar(ruta_entrada);
+    try c.cargados.put(c.a(), ruta, .cargando);
+    try c.pila.append(c.a(), ruta);
+    const entrada = try c.parseArchivo(ruta);
+    try c.cargarDeps(dirname(ruta), entrada);
+    try c.cargados.put(c.a(), ruta, .cargado);
 
     // Combinado = definiciones de los módulos ++ programa de entrada completo.
     const total = c.defs.items.len + entrada.len;
