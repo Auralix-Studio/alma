@@ -9,6 +9,10 @@ test {
     _ = @import("ejecucion/interprete.zig");
     _ = @import("semantica/analizador.zig");
     _ = @import("paquete.zig");
+    _ = @import("numeros.zig");
+    _ = @import("ir.zig");
+    _ = @import("emision_c.zig");
     _ = @import("codegen_c.zig");
     _ = @import("codegen_pe.zig");
+    _ = @import("modulos.zig");
 }

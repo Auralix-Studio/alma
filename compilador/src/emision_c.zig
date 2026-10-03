@@ -118,7 +118,7 @@ pub fn generar(a: std.mem.Allocator, programa: *const ir.Programa) Error![]u8 {
         try e.e(";\n");
     }
     for (programa.funciones, 0..) |fun, id| try e.funcion(id, fun);
-    try e.f("int main(void){{ alma_entrar_llamada(); Val resultado=af_{d}(); alma_soltar(&resultado);\n", .{programa.entrada});
+    try e.f("int main(void){{ alma_iniciar(); alma_entrar_llamada(); Val resultado=af_{d}(); alma_soltar(&resultado);\n", .{programa.entrada});
     try e.e("#ifdef ALMA_VERIFICAR_MEMORIA\n  if(alma_textos_vivos) alma_error(\"textos sin liberar\");\n#endif\n  return 0;\n}\n");
     return e.out.toOwnedSlice(a);
 }

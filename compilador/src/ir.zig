@@ -3,6 +3,7 @@
 const std = @import("std");
 const ast = @import("sintaxis/ast.zig");
 const modulos = @import("modulos.zig");
+const numeros = @import("numeros.zig");
 
 pub const Reg = usize;
 pub const Literal = union(enum) { entero: i64, decimal: f64, texto: []const u8, logico: bool, nulo };
@@ -91,23 +92,7 @@ const Constructor = struct {
         return r;
     }
     fn decodificar(self: *Constructor, lex: []const u8) Error![]const u8 {
-        var out: std.ArrayListUnmanaged(u8) = .empty;
-        const inner = lex[1 .. lex.len - 1];
-        var i: usize = 0;
-        while (i < inner.len) : (i += 1) {
-            var c = inner[i];
-            if (c == '\\' and i + 1 < inner.len) {
-                i += 1;
-                c = switch (inner[i]) {
-                    'n' => '\n',
-                    'r' => '\r',
-                    't' => '\t',
-                    else => inner[i],
-                };
-            }
-            try out.append(self.a, c);
-        }
-        return out.toOwnedSlice(self.a);
+        return numeros.decodificarTexto(self.a, lex);
     }
     fn expr(self: *Constructor, e: *const ast.Expr) Error!Reg {
         switch (e.*) {
@@ -401,4 +386,21 @@ fn probarFalloAsignacion(a: std.mem.Allocator) !void {
 
 test "IR libera recursos ante fallos de asignacion" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, probarFalloAsignacion, .{});
+}
+
+test "IR decodifica escapes igual que el interprete, incluido NUL" {
+    var p = try programaPrueba(std.testing.allocator,
+        \funcion principal()
+        \    imprimir("a\0b\t\\")
+        \    imprimir(-9223372036854775808)
+        \fin
+    );
+    defer p.deinit();
+    try std.testing.expect(p.diag == null);
+    try std.testing.expectEqualSlices(u8, "a\x00b\t\\", p.funciones[0].instrucciones[0].dato.literal.valor.texto);
+    var minimo: ?i64 = null;
+    for (p.funciones[0].instrucciones) |ins| if (ins.dato == .literal and ins.dato.literal.valor == .entero) {
+        minimo = ins.dato.literal.valor.entero;
+    };
+    try std.testing.expectEqual(@as(?i64, std.math.minInt(i64)), minimo);
 }

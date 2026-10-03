@@ -10,6 +10,7 @@ const lexer = @import("../lexico/lexer.zig");
 const tk = @import("../lexico/token.zig");
 const ast = @import("ast.zig");
 const limites = @import("../limites.zig");
+const numeros = @import("../numeros.zig");
 
 const Token = tk.Token;
 const Expr = ast.Expr;
@@ -520,6 +521,18 @@ pub const Parser = struct {
             defer self.profundidad -= 1;
             const op = self.avanzar().tipo;
             const operando = try self.parseUnario();
+            // `-9223372036854775808` es el mínimo i64: la magnitud sola no cabe en i64,
+            // así que la negación directa de ese literal (también entre paréntesis) se
+            // pliega en un único literal negativo. Ningún otro literal se pliega.
+            if (op == .menos and operando.* == .literal_entero) {
+                const lex = operando.literal_entero;
+                if (numeros.magnitudLiteral(lex)) |magnitud| {
+                    if (magnitud == 1 << 63) {
+                        operando.* = .{ .literal_entero = try std.fmt.allocPrint(self.a(), "-{s}", .{lex}) };
+                        return operando;
+                    }
+                }
+            }
             return self.nuevoExpr(.{ .unaria = .{ .op = op, .operando = operando } });
         }
         return self.parsePostfijo();

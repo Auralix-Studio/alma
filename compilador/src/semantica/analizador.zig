@@ -17,6 +17,7 @@ const lexer = @import("../lexico/lexer.zig");
 const parser = @import("../sintaxis/parser.zig");
 const ast = @import("../sintaxis/ast.zig");
 const modulos = @import("../modulos.zig");
+const numeros = @import("../numeros.zig");
 
 const Stmt = ast.Stmt;
 const Expr = ast.Expr;
@@ -382,7 +383,12 @@ pub const Analizador = struct {
 
     fn analizarExpr(self: *Analizador, e: *const Expr) Error!void {
         switch (e.*) {
-            .literal_entero, .literal_decimal, .literal_texto, .literal_bool, .literal_nulo => {},
+            .literal_entero => |s| {
+                // El parser ya plegó `-9223372036854775808`; cualquier otra magnitud
+                // fuera de i64 es un error estático (docs/PROPUESTA-NUMEROS.md).
+                if (numeros.valorLiteral(s) == null) try self.err("literal entero fuera del rango de i64: {s}", .{s});
+            },
+            .literal_decimal, .literal_texto, .literal_bool, .literal_nulo => {},
             .identificador => |nombre| {
                 if (self.resolver(nombre) == null) try self.err("nombre no definido: '{s}'", .{nombre});
             },
@@ -710,4 +716,11 @@ test "tipos: programa anotado válido no da falsos positivos" {
         \\fin
     ;
     try esperarLimpio(src);
+}
+
+test "literal entero: acepta el minimo i64 y rechaza magnitudes fuera de rango" {
+    try esperarLimpio("a = -9223372036854775808\nb = -(9223372036854775808)\nc = 9223372036854775807\n");
+    try esperarProblema("a = 9223372036854775808\n", "fuera del rango de i64");
+    try esperarProblema("a = -9223372036854775809\n", "fuera del rango de i64");
+    try esperarProblema("a = 99999999999999999999999\n", "fuera del rango de i64");
 }

@@ -21,6 +21,7 @@ const tk = @import("../lexico/token.zig");
 const limites = @import("../limites.zig");
 const modulos = @import("../modulos.zig");
 const MemoriaGc = @import("memoria_gc.zig").Memoria;
+const numeros = @import("../numeros.zig");
 
 const Expr = ast.Expr;
 const Stmt = ast.Stmt;
@@ -105,11 +106,29 @@ fn comoDecimal(v: Valor) ?f64 {
     };
 }
 
+/// Orden exacto entre dos números (docs/PROPUESTA-NUMEROS.md). null si alguno es
+/// NaN o si algún operando no es numérico.
+fn ordenNumerico(a: Valor, b: Valor) ?std.math.Order {
+    return switch (a) {
+        .entero => |x| switch (b) {
+            .entero => |y| std.math.order(x, y),
+            .decimal => |y| numeros.compararEnteroDecimal(x, y),
+            else => null,
+        },
+        .decimal => |x| switch (b) {
+            .entero => |y| if (numeros.compararEnteroDecimal(y, x)) |o| o.invert() else null,
+            .decimal => |y| if (std.math.isNan(x) or std.math.isNan(y)) null else std.math.order(x, y),
+            else => null,
+        },
+        else => null,
+    };
+}
+
 fn sonIguales(a: Valor, b: Valor) bool {
-    if (a == .entero and b == .entero) return a.entero == b.entero;
-    const la = comoDecimal(a);
-    const lb = comoDecimal(b);
-    if (la != null and lb != null) return la.? == lb.?;
+    if (comoDecimal(a) != null and comoDecimal(b) != null) {
+        const orden = ordenNumerico(a, b) orelse return false;
+        return orden == .eq;
+    }
     if (std.meta.activeTag(a) != std.meta.activeTag(b)) return false;
     return switch (a) {
         .texto => std.mem.eql(u8, a.texto, b.texto),
@@ -1060,17 +1079,6 @@ pub const Interprete = struct {
     fn aplicarBinario(self: *Interprete, op: tk.TipoToken, izq: Valor, der: Valor) ErrorEjec!Valor {
         const T = std.meta.activeTag;
 
-        // Evitar pérdida de precisión al comparar enteros mayores que 2^53.
-        if (izq == .entero and der == .entero) {
-            switch (op) {
-                .menor => return .{ .logico = izq.entero < der.entero },
-                .mayor => return .{ .logico = izq.entero > der.entero },
-                .menor_igual => return .{ .logico = izq.entero <= der.entero },
-                .mayor_igual => return .{ .logico = izq.entero >= der.entero },
-                else => {},
-            }
-        }
-
         // Concatenación de texto con '+'.
         if (op == .mas and T(izq) == .texto and T(der) == .texto) {
             var out: Buffer = .empty;
@@ -1090,12 +1098,18 @@ pub const Interprete = struct {
         const ld = comoDecimal(der);
         if (li == null or ld == null) return self.fallar("la operación '{s}' requiere números", .{@tagName(op)});
 
-        // Comparaciones (enteros o decimales).
+        // Comparaciones por valor matemático exacto (sin pasar enteros por f64).
+        // NaN no es ordenable: toda comparación de orden con NaN es falsa.
         switch (op) {
-            .menor => return .{ .logico = li.? < ld.? },
-            .mayor => return .{ .logico = li.? > ld.? },
-            .menor_igual => return .{ .logico = li.? <= ld.? },
-            .mayor_igual => return .{ .logico = li.? >= ld.? },
+            .menor, .mayor, .menor_igual, .mayor_igual => {
+                const orden = ordenNumerico(izq, der) orelse return .{ .logico = false };
+                return .{ .logico = switch (op) {
+                    .menor => orden == .lt,
+                    .mayor => orden == .gt,
+                    .menor_igual => orden != .gt,
+                    else => orden != .lt,
+                } };
+            },
             else => {},
         }
 
@@ -1145,29 +1159,9 @@ pub const Interprete = struct {
     }
 
     fn decodificarTexto(self: *Interprete, lex: []const u8) ErrorEjec![]const u8 {
-        const inner = if (lex.len >= 2) lex[1 .. lex.len - 1] else lex;
-        var out: Buffer = .empty;
-        defer out.deinit(self.allocator);
-        var i: usize = 0;
-        while (i < inner.len) : (i += 1) {
-            const c = inner[i];
-            if (c == '\\' and i + 1 < inner.len) {
-                i += 1;
-                const escapado: u8 = switch (inner[i]) {
-                    'n' => '\n',
-                    't' => '\t',
-                    'r' => '\r',
-                    '0' => 0,
-                    else => inner[i], // \\ y \" caen aquí
-                };
-                try out.append(self.allocator, escapado);
-            } else {
-                try out.append(self.allocator, c);
-            }
-        }
-        const _s = try out.toOwnedSlice(self.allocator);
-        try self.registrarGc(.{ .texto = _s });
-        return _s;
+        const texto = try numeros.decodificarTexto(self.allocator, lex);
+        try self.registrarGc(.{ .texto = texto });
+        return texto;
     }
 
     fn copiarTexto(self: *Interprete, s: []const u8) ErrorEjec![]const u8 {
@@ -1206,9 +1200,8 @@ pub const Interprete = struct {
                 try out.appendSlice(self.allocator, bytes);
             },
             .decimal => |d| {
-                var temporal: [512]u8 = undefined;
-                const bytes = std.fmt.bufPrint(&temporal, "{}", .{d}) catch return self.fallar("no se pudo formatear el decimal", .{});
-                try out.appendSlice(self.allocator, bytes);
+                var temporal: [numeros.max_decimal]u8 = undefined;
+                try out.appendSlice(self.allocator, numeros.formatearDecimal(&temporal, d));
             },
             .texto => |s| try out.appendSlice(self.allocator, s),
             .logico => |b| try out.appendSlice(self.allocator, if (b) "verdadero" else "falso"),
@@ -1991,6 +1984,38 @@ test "comparaciones enteras conservan precision por encima de 2^53" {
         \\imprimir(-b < -a, -b == -a)
     ;
     try esperarSalida(src, "falso verdadero verdadero verdadero falso falso\nverdadero falso\n");
+}
+
+test "comparaciones mixtas entero/decimal son exactas" {
+    const src =
+        \\a = 9007199254740993
+        \\d = 9007199254740992.0
+        \\imprimir(a == d, a != d, a > d, a >= d, a < d, a <= d)
+        \\imprimir(d < a, d == 9007199254740992, 0 == -0.0, 1 < 1.5, -1 > -1.5)
+        \\imprimir(9223372036854775807 < 9223372036854775808.0)
+    ;
+    try esperarSalida(src, "falso verdadero verdadero verdadero falso falso\nverdadero verdadero verdadero verdadero verdadero\nverdadero\n");
+}
+
+test "formato decimal canonico en imprimir y texto" {
+    const src =
+        \\imprimir(0.1 + 0.2, 10000000.0, 1.0 / 3.0, -0.0, 1e21, 1e-7, 2.5)
+        \\imprimir(texto(0.000001) + "|" + texto(100000000000000000000.0))
+    ;
+    try esperarSalida(src, "0.30000000000000004 10000000 0.3333333333333333 -0 1e21 1e-7 2.5\n0.000001|100000000000000000000\n");
+}
+
+test "NaN no es igual ni ordenable" {
+    const src =
+        \\importar matematicas
+        \\n = matematicas.raiz(-1.0)
+        \\imprimir(n == n, n != n, n < 1, 1 > n, n >= 0.5, texto(n))
+    ;
+    try esperarSalida(src, "falso verdadero falso falso falso nan\n");
+}
+
+test "escape NUL se conserva como un byte" {
+    try esperarSalida("t = \"a\\0b\"\nimprimir(longitud(t), t)", "3 a\x00b\n");
 }
 
 test "desbordamientos aritmeticos son errores de Alma" {
