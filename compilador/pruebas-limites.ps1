@@ -47,4 +47,27 @@ if ($Seccion -in @('todo', 'parser')) {
     }
 }
 
+if ($Seccion -in @('todo', 'interprete')) {
+    $def = "funcion repetir()`n    repetir()`nfin`n"
+    $archivo = Guardar 'recursion.alma' ($def + "funcion principal()`n    repetir()`nfin`n")
+    $r = Ejecutar $Alma @('ejecutar', $archivo)
+    Comprobar ($r.Codigo -eq 1 -and $r.Error.Contains('recursion.alma:2:5:') -and $r.Error.Contains('desbordamiento de pila')) "Recursión infinita: $($r.Codigo) $($r.Error)"
+    $archivo = Guardar 'captura.alma' ($def + @'
+funcion principal()
+    i = 0
+    mientras i < 2
+        intentar
+            repetir()
+        capturar (e)
+            imprimir(e.mensaje)
+        fin
+        i = i + 1
+    fin
+    imprimir(42)
+fin
+'@)
+    $r = Ejecutar $Alma @('ejecutar', $archivo)
+    Comprobar ($r.Codigo -eq 0 -and $r.Salida.Replace("`r`n", "`n") -eq "desbordamiento de pila`ndesbordamiento de pila`n42`n") "Captura y recuperación: $($r.Codigo) $($r.Error) $($r.Salida)"
+}
+
 Write-Output "$script:comprobaciones comprobaciones de límites correctas ($Seccion)."

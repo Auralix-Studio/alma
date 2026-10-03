@@ -14,6 +14,7 @@ const lexer = @import("../lexico/lexer.zig");
 const parser = @import("../sintaxis/parser.zig");
 const ast = @import("../sintaxis/ast.zig");
 const tk = @import("../lexico/token.zig");
+const limites = @import("../limites.zig");
 
 const Expr = ast.Expr;
 const Stmt = ast.Stmt;
@@ -185,6 +186,7 @@ pub const Interprete = struct {
     diag_pos: ast.Pos = .{},
     /// Valor de error en vuelo (fijado por `lanzar`; lo consume `capturar`).
     error_valor: ?Valor = null,
+    profundidad_llamadas: usize = 0,
     /// E/S para el módulo `sistema` (archivos). La fija el CLI; null = sin E/S.
     io: ?std.Io = null,
     /// Generador pseudoaleatorio (para `matematicas.aleatorio`), sembrado perezosamente.
@@ -584,6 +586,8 @@ pub const Interprete = struct {
     }
 
     fn llamarFuncion(self: *Interprete, f: *const Stmt.Funcion, args: []const Valor) ErrorEjec!Valor {
+        try self.entrarLlamada();
+        defer self.profundidad_llamadas -= 1;
         if (args.len != f.params.len) {
             return self.fallar("'{s}' espera {d} argumento(s), recibió {d}", .{ f.nombre, f.params.len, args.len });
         }
@@ -604,6 +608,8 @@ pub const Interprete = struct {
     }
 
     fn llamarMetodo(self: *Interprete, inst: *Instancia, f: *const Stmt.Funcion, args: []const Valor) ErrorEjec!Valor {
+        try self.entrarLlamada();
+        defer self.profundidad_llamadas -= 1;
         if (args.len != f.params.len) {
             return self.fallar("'{s}' espera {d} argumento(s), recibió {d}", .{ f.nombre, f.params.len, args.len });
         }
@@ -615,6 +621,11 @@ pub const Interprete = struct {
             .retornar => |v| v,
             else => .nulo,
         };
+    }
+
+    fn entrarLlamada(self: *Interprete) ErrorEjec!void {
+        if (self.profundidad_llamadas >= limites.llamadas) return self.fallar("desbordamiento de pila", .{});
+        self.profundidad_llamadas += 1;
     }
 
     fn esVerdadero(self: *Interprete, v: Valor) ErrorEjec!bool {
@@ -1438,6 +1449,72 @@ fn redPublicar(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
 }
 
 // — Pruebas —
+
+test "limite de llamadas: frontera captura y recuperacion" {
+    try esperarSalida(
+        \\funcion bajar(n)
+        \\    si n == 0
+        \\        retornar 42
+        \\    fin
+        \\    retornar bajar(n - 1)
+        \\fin
+        \\funcion principal()
+        \\    imprimir(bajar(62))
+        \\    i = 0
+        \\    mientras i < 2
+        \\        intentar
+        \\            bajar(63)
+        \\        capturar (e)
+        \\            imprimir(e.mensaje)
+        \\        fin
+        \\        imprimir(bajar(62))
+        \\        i = i + 1
+        \\    fin
+        \\fin
+    , "42\ndesbordamiento de pila\n42\ndesbordamiento de pila\n42\n");
+}
+
+test "limite de llamadas: recursion mutua" {
+    try esperarSalida(
+        \\funcion a(n)
+        \\    si n == 0
+        \\        retornar 1
+        \\    fin
+        \\    retornar b(n - 1)
+        \\fin
+        \\funcion b(n)
+        \\    retornar a(n)
+        \\fin
+        \\intentar
+        \\    a(33)
+        \\capturar (e)
+        \\    imprimir(e.mensaje)
+        \\fin
+    , "desbordamiento de pila\n");
+}
+
+test "limite de llamadas: metodos y funciones comparten contador" {
+    try esperarSalida(
+        \\modelo Contador
+        \\    funcion bajar(n)
+        \\        si n == 0
+        \\            retornar 42
+        \\        fin
+        \\        retornar yo.bajar(n - 1)
+        \\    fin
+        \\fin
+        \\funcion principal()
+        \\    c = Contador()
+        \\    imprimir(c.bajar(62))
+        \\    intentar
+        \\        c.bajar(63)
+        \\    capturar (e)
+        \\        imprimir(e.mensaje)
+        \\    fin
+        \\    imprimir(c.bajar(62))
+        \\fin
+    , "42\ndesbordamiento de pila\n42\n");
+}
 
 fn esperarSalida(fuente: []const u8, esperado: []const u8) !void {
     const toks = try lexer.tokenizar(std.testing.allocator, fuente);
