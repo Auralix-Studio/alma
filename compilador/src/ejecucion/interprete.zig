@@ -1606,7 +1606,14 @@ const JsonParser = struct {
                     'n' => '\n',
                     't' => '\t',
                     'r' => '\r',
-                    else => e,
+                    'b' => 0x08,
+                    'f' => 0x0c,
+                    '"', '\\', '/' => e,
+                    'u' => {
+                        try self.escapeUnicode(&out);
+                        continue;
+                    },
+                    else => return self.err("escape inválido en cadena"),
                 };
                 try out.append(self.interp.allocator, ch);
             } else {
@@ -1614,6 +1621,32 @@ const JsonParser = struct {
             }
         }
         return self.err("cadena sin cerrar");
+    }
+    fn hex4(self: *JsonParser) ErrorEjec!u16 {
+        if (self.pos + 4 > self.s.len) return self.err("escape \\u incompleto");
+        const digitos = self.s[self.pos..][0..4];
+        for (digitos) |d| if (!std.ascii.isHex(d)) return self.err("escape \\u inválido");
+        const v = std.fmt.parseInt(u16, digitos, 16) catch return self.err("escape \\u inválido");
+        self.pos += 4;
+        return v;
+    }
+    /// `\uXXXX` (tras la `u`), con pares sustitutos UTF-16, escrito como UTF-8.
+    fn escapeUnicode(self: *JsonParser, out: *Buffer) ErrorEjec!void {
+        const alto = try self.hex4();
+        var punto: u21 = alto;
+        if (alto >= 0xD800 and alto <= 0xDBFF) {
+            if (self.pos + 2 > self.s.len or self.s[self.pos] != '\\' or self.s[self.pos + 1] != 'u')
+                return self.err("par sustituto incompleto");
+            self.pos += 2;
+            const bajo = try self.hex4();
+            if (bajo < 0xDC00 or bajo > 0xDFFF) return self.err("par sustituto inválido");
+            punto = 0x10000 + ((@as(u21, alto) - 0xD800) << 10) + (bajo - 0xDC00);
+        } else if (alto >= 0xDC00 and alto <= 0xDFFF) {
+            return self.err("par sustituto inválido");
+        }
+        var bytes: [4]u8 = undefined;
+        const n = std.unicode.utf8Encode(punto, &bytes) catch return self.err("escape \\u inválido");
+        try out.appendSlice(self.interp.allocator, bytes[0..n]);
     }
     fn numero(self: *JsonParser) ErrorEjec!Valor {
         const inicio = self.pos;
@@ -1631,7 +1664,11 @@ const JsonParser = struct {
         const lex = self.s[inicio..self.pos];
         if (lex.len == 0) return self.err("número inválido");
         if (!es_dec) {
-            if (std.fmt.parseInt(i64, lex, 10)) |n| return .{ .entero = n } else |_| {}
+            if (std.fmt.parseInt(i64, lex, 10)) |n| {
+                // `-0` conserva su signo como decimal (docs/PROPUESTA-NUMEROS.md).
+                if (n == 0 and lex[0] == '-') return .{ .decimal = -0.0 };
+                return .{ .entero = n };
+            } else |_| {}
         }
         const d = std.fmt.parseFloat(f64, lex) catch return self.err("número inválido");
         return .{ .decimal = d };
@@ -1702,6 +1739,11 @@ fn jsonEscribirCadena(interp: *Interprete, out: *Buffer, s: []const u8) ErrorEje
             '\n' => try out.appendSlice(interp.allocator, "\\n"),
             '\t' => try out.appendSlice(interp.allocator, "\\t"),
             '\r' => try out.appendSlice(interp.allocator, "\\r"),
+            // JSON no admite caracteres de control sin escapar (incluido NUL).
+            0...0x08, 0x0b, 0x0c, 0x0e...0x1f => {
+                const hex = "0123456789abcdef";
+                try out.appendSlice(interp.allocator, &[_]u8{ '\\', 'u', '0', '0', hex[c >> 4], hex[c & 0xf] });
+            },
             else => try out.append(interp.allocator, c),
         }
     }
@@ -1712,7 +1754,11 @@ fn jsonEscribir(interp: *Interprete, out: *Buffer, v: Valor, nivel: usize) Error
     if (nivel > limites.anidamiento) return interp.fallar("estructura demasiado anidada para serializar (¿contiene un ciclo?)", .{});
     switch (v) {
         .nulo => try out.appendSlice(interp.allocator, "null"),
-        .entero, .decimal => try interp.formatearValor(out, v),
+        .entero => try interp.formatearValor(out, v),
+        .decimal => |d| {
+            if (!std.math.isFinite(d)) return interp.fallar("JSON no admite el decimal {s}", .{if (std.math.isNan(d)) "nan" else if (d < 0) "-inf" else "inf"});
+            try interp.formatearValor(out, v);
+        },
         .logico => |b| try out.appendSlice(interp.allocator, if (b) "true" else "false"),
         .texto => |s| try jsonEscribirCadena(interp, out, s),
         .lista => |lst| {
@@ -2441,6 +2487,30 @@ test "librería estándar: json" {
         \\fin
     ;
     try esperarSalida(src, "Alma\n1\n[1,2,3]\n");
+}
+
+test "json: escapes unicode, control, -0 y no finitos" {
+    const src =
+        \\importar json
+        \\importar matematicas
+        \\d = json.analizar("[\"a\\u00e1\\ud83d\\ude00\\/\\b\", -0, 1e21]")
+        \\imprimir(longitud(d[0]), d[1], d[2])
+        \\imprimir(json.serializar(["x\0y\ty", 0.5, -0.0]))
+        \\intentar
+        \\    json.serializar([matematicas.raiz(-1.0)])
+        \\capturar (e)
+        \\    imprimir(e.mensaje)
+        \\fin
+        \\intentar
+        \\    json.analizar("\"\\x\"")
+        \\capturar (e)
+        \\    imprimir(e.mensaje)
+        \\fin
+    ;
+    try esperarSalida(src, "9 -0 1e21\n" ++
+        "[\"x\\u0000y\\ty\",0.5,-0]\n" ++
+        "JSON no admite el decimal nan\n" ++
+        "JSON inválido: escape inválido en cadena\n");
 }
 
 fn comprobarGc(fuente: []const u8, salida: []const u8, maximo: usize) !void {
