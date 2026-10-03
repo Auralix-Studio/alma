@@ -6,36 +6,93 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
   test:
-    name: Build and Test
+    name: Pruebas (${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    
+    timeout-minutes: 60
+    env:
+      ZIG_VERSION: 0.16.0
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Instalar Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.16.0
-          
-      - name: Pruebas unitarias
+
+      # Instalación explícita de Zig 0.16.0 desde ziglang.org con verificación
+      # SHA-256 contra el índice oficial (las acciones setup-zig no garantizan
+      # soportar los nombres de archivo de 0.16).
+      - name: Instalar Zig ${{ env.ZIG_VERSION }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS" in
+            Linux)   plataforma=x86_64-linux ;;
+            Windows) plataforma=x86_64-windows ;;
+            *) echo "Sistema no soportado: $RUNNER_OS" >&2; exit 1 ;;
+          esac
+          curl -fsSL https://ziglang.org/download/index.json -o "$RUNNER_TEMP/zig-index.json"
+          url=$(jq -r --arg v "$ZIG_VERSION" --arg p "$plataforma" '.[$v][$p].tarball' "$RUNNER_TEMP/zig-index.json")
+          sha=$(jq -r --arg v "$ZIG_VERSION" --arg p "$plataforma" '.[$v][$p].shasum' "$RUNNER_TEMP/zig-index.json")
+          if [ -z "$url" ] || [ "$url" = "null" ] || [ -z "$sha" ] || [ "$sha" = "null" ]; then
+            echo "Zig $ZIG_VERSION no figura en el índice para $plataforma" >&2; exit 1
+          fi
+          archivo="$RUNNER_TEMP/$(basename "$url")"
+          curl -fsSL "$url" -o "$archivo"
+          echo "$sha  $archivo" | sha256sum -c -
+          destino="$RUNNER_TEMP/zig"
+          mkdir -p "$destino"
+          case "$archivo" in
+            *.tar.xz) tar -xJf "$archivo" -C "$destino" --strip-components=1 ;;
+            *.zip)
+              pwsh -NoProfile -Command "Expand-Archive -LiteralPath '$archivo' -DestinationPath '$destino-tmp' -Force"
+              mv "$destino-tmp"/*/* "$destino"/ ;;
+          esac
+          echo "$destino" >> "$GITHUB_PATH"
+
+      - name: Comprobar versión de Zig
+        shell: bash
+        run: test "$(zig version)" = "$ZIG_VERSION"
+
+      - name: Pruebas unitarias (Debug)
         run: zig build test --summary all
         working-directory: ./compilador
-        
-      - name: Compilar binario de pruebas
+
+      - name: Pruebas unitarias (ReleaseSafe)
+        run: zig build test -Doptimize=ReleaseSafe --summary all
+        working-directory: ./compilador
+
+      - name: Compilar alma
         run: zig build
         working-directory: ./compilador
-        
-      - name: Pruebas CLI e integración (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          ./pruebas-limites.ps1
-          ./pruebas-cli.ps1
-          ./pruebas-propio.ps1
+
+      # Intérprete vs backend C en ambos sistemas; también backend propio en Windows.
+      - name: Pruebas diferenciales
+        run: zig build diferencial
         working-directory: ./compilador
-        
-      # TODO: Añadir pruebas diferenciales cuando se resuelva la Tarea 4
+
+      - name: Pruebas de límites
+        shell: pwsh
+        run: ./pruebas-limites.ps1
+        working-directory: ./compilador
+
+      - name: Pruebas CLI, módulos y compilación (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./pruebas-cli.ps1
+          ./pruebas-modulos.ps1
+          ./pruebas-compilar.ps1
+        working-directory: ./compilador
+
+      # El script vacía PATH durante la compilación y ejecución: Zig no está disponible.
+      - name: Backend propio sin Zig en PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./pruebas-propio.ps1
+        working-directory: ./compilador
