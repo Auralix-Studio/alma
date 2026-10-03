@@ -188,6 +188,10 @@ pub const Analizador = struct {
             }
             for (unidad.enlaces) |enlace| {
                 try self.registrarGlobal(enlace.simbolo);
+                if (enlace.simbolo.dato == .declaracion) {
+                    const d = enlace.simbolo.dato.declaracion;
+                    try self.definir(d.nombre, .{ .clase = if (d.fijo) .constante else .variable, .tipo = if (d.tipo) |t| nombreATipo(t) else .desconocido });
+                }
                 self.cima().getPtr(enlace.nombre).?.importado = true;
             }
             for (unidad.stmts) |s| try self.analizarStmt(s);

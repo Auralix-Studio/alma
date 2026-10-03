@@ -16,7 +16,7 @@ funcion descargar(url: texto) -> diccionario
         retornar {"estado": falso, "error": "Se requiere una URL para descargar."}
     fin
     intentar
-        respuesta = red.publicar(BASE + "/api/", "url=" + url + "&hd=1", cabeceras())
+        respuesta = red.publicar(BASE + "/api/", "url=" + red.codificar_url(url) + "&hd=1", cabeceras())
         cuerpo = json.analizar(respuesta["cuerpo"])
         datos = cuerpo["data"]
 
@@ -66,7 +66,7 @@ funcion buscar(consulta: texto) -> diccionario
         retornar {"estado": falso, "error": "Se requiere una consulta para buscar."}
     fin
     intentar
-        cuerpo_post = "keywords=" + consulta + "&count=20&cursor=0&hd=1"
+        cuerpo_post = "keywords=" + red.codificar_url(consulta) + "&count=20&cursor=0&hd=1"
         respuesta = red.publicar(BASE + "/api/feed/search/", cuerpo_post, cabeceras())
         videos = json.analizar(respuesta["cuerpo"])["data"]["videos"]
         si longitud(videos) == 0

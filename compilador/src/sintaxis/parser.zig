@@ -159,7 +159,7 @@ pub const Parser = struct {
 
     fn parseStmtInterno(self: *Parser) ErrorParser!Stmt.Dato {
         switch (self.actual().tipo) {
-            .kw_fijo => return self.parseDeclFija(),
+            .kw_fijo => return self.parseDeclFija(false),
             .kw_importar => return self.parseImportar(),
             .kw_exportar => return self.parseExportar(),
             .kw_si => return self.parseSi(),
@@ -214,7 +214,7 @@ pub const Parser = struct {
         return .{ .expresion = e };
     }
 
-    fn parseDeclFija(self: *Parser) ErrorParser!Stmt.Dato {
+    fn parseDeclFija(self: *Parser, exportar: bool) ErrorParser!Stmt.Dato {
         _ = try self.consumir(.kw_fijo);
         const nombre = try self.consumir(.identificador);
         var tipo: ?[]const u8 = null;
@@ -225,7 +225,7 @@ pub const Parser = struct {
         _ = try self.consumir(.asignar);
         const valor = try self.parseExpr();
         try self.consumirNuevaLinea();
-        return .{ .declaracion = .{ .nombre = nombre.lexema, .tipo = tipo, .fijo = true, .valor = valor } };
+        return .{ .declaracion = .{ .nombre = nombre.lexema, .tipo = tipo, .fijo = true, .valor = valor, .exportar = exportar } };
     }
 
     fn parseImportar(self: *Parser) ErrorParser!Stmt.Dato {
@@ -243,6 +243,7 @@ pub const Parser = struct {
     fn parseExportar(self: *Parser) ErrorParser!Stmt.Dato {
         _ = try self.consumir(.kw_exportar);
         switch (self.actual().tipo) {
+            .kw_fijo => return self.parseDeclFija(true),
             .kw_funcion => return .{ .funcion = try self.parseFuncion(true, false) },
             .kw_asincrona => {
                 _ = self.avanzar();
@@ -250,7 +251,7 @@ pub const Parser = struct {
             },
             .kw_estructura => return self.parseEstructura(true),
             .kw_modelo => return self.parseModelo(true),
-            else => return self.fallar("'exportar' debe preceder a funcion/estructura/modelo, no {s}", .{@tagName(self.actual().tipo)}),
+            else => return self.fallar("'exportar' debe preceder a fijo/funcion/estructura/modelo, no {s}", .{@tagName(self.actual().tipo)}),
         }
     }
 

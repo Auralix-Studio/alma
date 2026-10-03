@@ -90,7 +90,7 @@ pub const Stmt = struct {
         hilo: *Expr,
     };
 
-    pub const Declaracion = struct { nombre: []const u8, tipo: ?[]const u8, fijo: bool, valor: *Expr };
+    pub const Declaracion = struct { nombre: []const u8, tipo: ?[]const u8, fijo: bool, valor: *Expr, exportar: bool = false };
     pub const Intentar = struct { cuerpo: []Stmt, variable: []const u8, captura: []Stmt };
     pub const Asignacion = struct { objetivo: *Expr, valor: *Expr };
     pub const Si = struct { ramas: []RamaSi, sino: ?[]Stmt };

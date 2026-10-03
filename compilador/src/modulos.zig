@@ -10,6 +10,7 @@ const std = @import("std");
 const lexer = @import("lexico/lexer.zig");
 const parser = @import("sintaxis/parser.zig");
 const ast = @import("sintaxis/ast.zig");
+const limites = @import("limites.zig");
 
 pub const Enlace = struct { nombre: []const u8, unidad: *const Unidad, simbolo: *const ast.Stmt };
 pub const Unidad = struct {
@@ -60,7 +61,7 @@ const Cargador = struct {
     /// `prog`). Devuelve error tras imprimir el diagnóstico si algo falla.
     fn parseArchivo(self: *Cargador, ruta: []const u8) Err![]ast.Stmt {
         const cwd: std.Io.Dir = .cwd();
-        const fuente = cwd.readFileAlloc(self.io, ruta, self.gpa, .unlimited) catch |err| {
+        const fuente = cwd.readFileAlloc(self.io, ruta, self.gpa, @enumFromInt(limites.archivo_fuente)) catch |err| {
             std.debug.print("No se pudo leer '{s}': {s}\n", .{ ruta, @errorName(err) });
             return error.ErrorCarga;
         };
@@ -136,6 +137,7 @@ const Cargador = struct {
                         .funcion => |f| if (f.exportar) f.nombre else null,
                         .estructura => |e| if (e.exportar) e.nombre else null,
                         .modelo => |m| if (m.exportar) m.nombre else null,
+                        .declaracion => |dc| if (dc.exportar) dc.nombre else null,
                         else => null,
                     };
                     if (n) |v| if (std.mem.eql(u8, v, imp.que)) {

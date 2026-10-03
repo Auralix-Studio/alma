@@ -22,6 +22,7 @@ const paquete = @import("paquete.zig");
 const codegen_c = @import("codegen_c.zig");
 const codegen_pe = @import("codegen_pe.zig");
 const ir = @import("ir.zig");
+const limites = @import("limites.zig");
 const builtin = @import("builtin");
 
 const VERSION = "0.1.0";
@@ -34,9 +35,9 @@ pub fn main(init: process.Init.Minimal) void {
 }
 
 fn ejecutarCli(init: process.Init.Minimal) !void {
-    var gpa_state: std.heap.DebugAllocator(.{}) = .init;
-    defer _ = gpa_state.deinit();
-    const gpa = gpa_state.allocator();
+    var debug_alloc: std.heap.DebugAllocator(.{}) = .init;
+    defer { if (builtin.mode == .Debug) _ = debug_alloc.deinit(); }
+    const gpa = if (builtin.mode == .Debug) debug_alloc.allocator() else std.heap.page_allocator;
 
     var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena_state.deinit();
@@ -70,13 +71,11 @@ fn ejecutarCli(init: process.Init.Minimal) !void {
         const ruta = try requiereRuta(args, "analizar");
         try cmdAnalizar(io, gpa, ruta);
     } else if (esIgual(comando, "compilar")) {
-        const ruta = try requiereRuta(args, "compilar");
-        const backend = if (args.len >= 4) args[3] else "--backend=c";
-        if (args.len > 4 or (!esIgual(backend, "--backend=c") and !esIgual(backend, "--backend=propio"))) {
-            std.debug.print("Uso: alma compilar <archivo.alma> [--backend=c|--backend=propio]\n", .{});
-            return error.BackendInvalido;
-        }
-        try cmdCompilar(io, gpa, ruta, esIgual(backend, "--backend=propio"));
+        const opciones = OpcionesCompilar.parse(args[2..]) catch {
+            std.debug.print("Uso: alma compilar <archivo.alma> [-o salida] [--backend=c|--backend=propio] [--conservar-c] [--sobrescribir]\n", .{});
+            return error.OpcionesInvalidas;
+        };
+        try cmdCompilar(io, gpa, opciones);
     } else if (esIgual(comando, "ir")) {
         const ruta = try requiereRuta(args, "ir");
         try cmdIr(io, gpa, ruta);
@@ -178,15 +177,87 @@ fn cmdAst(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
     std.debug.print("{s}\n", .{arbol});
 }
 
-fn cmdCompilar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8, propio: bool) !void {
+const OpcionesCompilar = struct {
+    ruta: ?[]const u8 = null,
+    salida: ?[]const u8 = null,
+    propio: bool = false,
+    conservar_c: bool = false,
+    sobrescribir: bool = false,
+
+    fn parse(args: []const [:0]const u8) !OpcionesCompilar {
+        var opciones = OpcionesCompilar{};
+        var backend_visto = false;
+        var i: usize = 0;
+        while (i < args.len) : (i += 1) {
+            const arg = args[i];
+            if (esIgual(arg, "-o")) {
+                i += 1;
+                if (i >= args.len or opciones.salida != null or args[i].len == 0 or args[i][0] == '-') return error.OpcionesInvalidas;
+                opciones.salida = args[i];
+            } else if (esIgual(arg, "--conservar-c")) {
+                opciones.conservar_c = true;
+            } else if (esIgual(arg, "--sobrescribir")) {
+                opciones.sobrescribir = true;
+            } else if (esIgual(arg, "--backend=c") or esIgual(arg, "--backend=propio")) {
+                if (backend_visto) return error.OpcionesInvalidas;
+                backend_visto = true;
+                opciones.propio = esIgual(arg, "--backend=propio");
+            } else {
+                if (arg.len == 0 or arg[0] == '-' or opciones.ruta != null) return error.OpcionesInvalidas;
+                opciones.ruta = arg;
+            }
+        }
+        if (opciones.ruta == null or (opciones.propio and opciones.conservar_c)) return error.OpcionesInvalidas;
+        return opciones;
+    }
+};
+
+fn cmdCompilar(io: std.Io, gpa: std.mem.Allocator, opciones: OpcionesCompilar) !void {
     var arena_st = std.heap.ArenaAllocator.init(gpa);
     defer arena_st.deinit();
     const arena = arena_st.allocator();
+    const ruta = opciones.ruta.?;
 
     var prog = try modulos.construir(gpa, io, ruta);
     defer prog.deinit();
     try validarPrograma(gpa, ruta, &prog);
-    if (propio) {
+    const ext_exe = if (opciones.propio or builtin.os.tag == .windows) ".exe" else "";
+    const destino = opciones.salida orelse try std.fmt.allocPrint(arena, "{s}{s}", .{ sinExtension(ruta), ext_exe });
+    const cwd = std.Io.Dir.cwd();
+    const existente = cwd.statFile(io, destino, .{ .follow_symlinks = false }) catch |err| switch (err) {
+        error.FileNotFound => null,
+        else => return err,
+    };
+    if (existente != null) {
+        if (!opciones.sobrescribir) {
+            std.debug.print("La salida '{s}' ya existe; usa --sobrescribir para reemplazarla.\n", .{destino});
+            return error.SalidaExistente;
+        }
+        const canonica = cwd.realPathFileAlloc(io, destino, arena) catch |err| switch (err) {
+            error.FileNotFound => null,
+            else => return err,
+        };
+        if (canonica) |p| for (prog.unidades) |u| {
+            if (std.mem.eql(u8, p, u.ruta)) {
+                std.debug.print("La salida no puede reemplazar un archivo fuente: {s}\n", .{destino});
+                return error.SalidaEsFuente;
+            }
+        };
+    }
+    // Mismo directorio/volumen de destino para publicar mediante rename atómico.
+    // Solo se elimina esta carpeta nueva, privada y creada exclusivamente aquí.
+    const padre = try cwd.realPathFileAlloc(io, std.fs.path.dirname(destino) orelse ".", arena);
+    var azar: [16]u8 = undefined;
+    io.random(&azar);
+    const nombre_temporal = try std.fmt.allocPrint(arena, ".alma-tmp-{s}", .{std.fmt.bytesToHex(azar, .lower)});
+    const temporal = try std.fs.path.join(arena, &.{ padre, nombre_temporal });
+    try cwd.createDir(io, temporal, @enumFromInt(if (builtin.os.tag == .windows) 0 else 0o700));
+    var conservar = false;
+    defer if (!conservar) {
+        cwd.deleteTree(io, temporal) catch |err| std.debug.print("No se pudo limpiar '{s}': {s}\n", .{ temporal, @errorName(err) });
+    };
+    const binario_temporal = try std.fs.path.join(arena, &.{ temporal, "programa.exe" });
+    if (opciones.propio) {
         var intermedia = try ir.construirModulos(gpa, &prog);
         defer intermedia.deinit();
         if (intermedia.diag) |diag| {
@@ -198,8 +269,8 @@ fn cmdCompilar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8, propio: boo
             std.debug.print("Backend propio: {s}\n", .{resultado.diag orelse "programa no soportado"});
             return error.ConstruccionNoSoportada;
         };
-        const destino = try std.fmt.allocPrint(arena, "{s}.exe", .{sinExtension(ruta)});
-        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = destino, .data = ejecutable });
+        try cwd.writeFile(io, .{ .sub_path = binario_temporal, .data = ejecutable });
+        try publicarBinario(io, binario_temporal, destino, opciones.sobrescribir);
         const mensaje = try std.fmt.allocPrint(arena, "Compilado con backend propio Windows x64: {s}\n", .{destino});
         try escribir(io, mensaje);
         return;
@@ -210,21 +281,20 @@ fn cmdCompilar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8, propio: boo
         return error.ConstruccionNoSoportada;
     };
 
-    const base = sinExtension(ruta);
-    const ruta_c = try std.fmt.allocPrint(arena, "{s}.c", .{base});
-    const ext_exe = if (builtin.os.tag == .windows) ".exe" else "";
-    const ruta_exe = try std.fmt.allocPrint(arena, "{s}{s}", .{ base, ext_exe });
-
-    const cwd: std.Io.Dir = .cwd();
+    const ruta_c = try std.fs.path.join(arena, &.{ temporal, "programa.c" });
     cwd.writeFile(io, .{ .sub_path = ruta_c, .data = fuente_c }) catch |err| {
         std.debug.print("No se pudo escribir '{s}': {s}\n", .{ ruta_c, @errorName(err) });
         return err;
     };
+    if (opciones.conservar_c) {
+        conservar = true;
+        try escribir(io, try std.fmt.allocPrint(arena, "C conservado: {s}\n", .{ruta_c}));
+    }
 
     // Compilar el C a binario nativo con `zig cc`.
-    const argv = [_][]const u8{ "zig", "cc", ruta_c, "-o", ruta_exe, "-O2" };
+    const argv = [_][]const u8{ "zig", "cc", ruta_c, "-o", binario_temporal, "-O2" };
     const res = std.process.run(gpa, io, .{ .argv = &argv }) catch |err| {
-        std.debug.print("Se generó '{s}', pero no pude invocar 'zig cc' ({s}).\nCompilalo a mano con:  zig cc {s} -o {s} -O2\n", .{ ruta_c, @errorName(err), ruta_c, ruta_exe });
+        std.debug.print("No pude invocar 'zig cc': {s}.\n", .{@errorName(err)});
         return err;
     };
     defer gpa.free(res.stdout);
@@ -240,8 +310,22 @@ fn cmdCompilar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8, propio: boo
         },
     }
 
-    const msg = try std.fmt.allocPrint(arena, "Compilado: {s}\n", .{ruta_exe});
+    try publicarBinario(io, binario_temporal, destino, opciones.sobrescribir);
+    const msg = try std.fmt.allocPrint(arena, "Compilado: {s}\n", .{destino});
     try escribir(io, msg);
+}
+
+fn publicarBinario(io: std.Io, temporal: []const u8, destino: []const u8, sobrescribir: bool) !void {
+    const cwd = std.Io.Dir.cwd();
+    if (sobrescribir) {
+        try cwd.rename(temporal, cwd, destino, io);
+    } else {
+        // No depende de la comprobación previa: protege también frente a carreras.
+        cwd.renamePreserve(temporal, cwd, destino, io) catch |err| {
+            if (err == error.PathAlreadyExists) std.debug.print("La salida ya existe; usa --sobrescribir: {s}\n", .{destino});
+            return err;
+        };
+    }
 }
 
 fn cmdIr(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
@@ -367,7 +451,7 @@ fn cmdNuevo(io: std.Io, gpa: std.mem.Allocator, nombre: []const u8) !void {
 
 fn cmdPaquete(io: std.Io, gpa: std.mem.Allocator, sub: []const u8) !void {
     const cwd: std.Io.Dir = .cwd();
-    const fuente = cwd.readFileAlloc(io, "alma.paquete", gpa, .unlimited) catch |err| {
+    const fuente = cwd.readFileAlloc(io, "alma.paquete", gpa, @enumFromInt(limites.archivo_fuente)) catch |err| {
         std.debug.print("No se encontró 'alma.paquete' en el directorio actual.\n", .{});
         return err;
     };
@@ -435,7 +519,7 @@ fn archivoExiste(io: std.Io, ruta: []const u8) bool {
 
 fn leerArchivo(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) ![]u8 {
     const cwd: std.Io.Dir = .cwd();
-    return cwd.readFileAlloc(io, ruta, gpa, .unlimited);
+    return cwd.readFileAlloc(io, ruta, gpa, @enumFromInt(limites.archivo_fuente));
 }
 
 fn escribir(io: std.Io, bytes: []const u8) !void {

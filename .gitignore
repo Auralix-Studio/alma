@@ -1,0 +1,13 @@
+# Artefactos de Zig
+.zig-cache/
+zig-out/
+compilador/.zig-cache/
+compilador/zig-out/
+
+# Binarios generados
+*.exe
+*.o
+*.obj
+
+# Temporales de compilación
+.alma-tmp-*

@@ -1,0 +1,41 @@
+name: CI Alma
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    name: Build and Test
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Instalar Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.16.0
+          
+      - name: Pruebas unitarias
+        run: zig build test --summary all
+        working-directory: ./compilador
+        
+      - name: Compilar binario de pruebas
+        run: zig build
+        working-directory: ./compilador
+        
+      - name: Pruebas CLI e integración (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          ./pruebas-limites.ps1
+          ./pruebas-cli.ps1
+          ./pruebas-propio.ps1
+        working-directory: ./compilador
+        
+      # TODO: Añadir pruebas diferenciales cuando se resuelva la Tarea 4

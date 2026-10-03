@@ -6,14 +6,27 @@ $ErrorActionPreference = "Stop"
 $destino = Join-Path $env:LOCALAPPDATA "Programs\Alma"
 
 # Busca el binario junto a este script.
-$origen = $null
+$candidatoName = $null
 foreach ($n in @("alma.exe", "alma-windows-x64.exe")) {
     $candidato = Join-Path $PSScriptRoot $n
-    if (Test-Path $candidato) { $origen = $candidato; break }
+    if (Test-Path $candidato) { $origen = $candidato; $candidatoName = $n; break }
 }
 if (-not $origen) {
     Write-Error "No encontré 'alma.exe' ni 'alma-windows-x64.exe' junto a este script."
     exit 1
+}
+
+$shaFile = Join-Path $PSScriptRoot "SHA256SUMS.txt"
+if (Test-Path $shaFile) {
+    $expectedLine = Get-Content $shaFile | Where-Object { $_ -match $candidatoName }
+    if ($expectedLine) {
+        $expectedHash = $expectedLine.Substring(0, 64)
+        $actualHash = (Get-FileHash $origen -Algorithm SHA256).Hash.ToLower()
+        if ($actualHash -ne $expectedHash) {
+            Write-Error "El hash SHA256 no coincide. Abortando instalación."
+            exit 1
+        }
+    }
 }
 
 New-Item -ItemType Directory -Force -Path $destino | Out-Null
