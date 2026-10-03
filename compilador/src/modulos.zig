@@ -3,31 +3,37 @@
 //! Alma es multi-archivo: un programa puede repartirse en varios `.alma` y usar
 //! `importar SIMBOLO desde "ruta"` para traer definiciones de otro archivo.
 //!
-//! Este "empaquetador" resuelve las importaciones a partir del archivo de entrada,
-//! carga recursivamente los módulos referenciados y produce **un solo programa
-//! combinado** (definiciones de los módulos + el archivo de entrada completo) que el
-//! intérprete/analizador ejecutan sin cambios. Resolución relativa al archivo que
-//! importa. Se cachea por ruta para evitar cargas repetidas y ciclos.
+//! Devuelve unidades en orden de dependencias y enlaces a símbolos exportados.
+//! No mezcla los espacios de nombres ni modifica los identificadores del AST.
 
 const std = @import("std");
 const lexer = @import("lexico/lexer.zig");
 const parser = @import("sintaxis/parser.zig");
 const ast = @import("sintaxis/ast.zig");
-const tk = @import("lexico/token.zig");
+
+pub const Enlace = struct { nombre: []const u8, unidad: *const Unidad, simbolo: *const ast.Stmt };
+pub const Unidad = struct {
+    ruta: []const u8,
+    stmts: []ast.Stmt,
+    enlaces: []const Enlace = &.{},
+    cargando: bool = true,
+};
 
 /// Error explícito: rompe el bucle de inferencia en la recursión mutua del cargador.
 const Err = error{ ErrorCarga, OutOfMemory };
 
-/// Programa combinado, listo para analizar/ejecutar. Es dueño de los recursos
+/// Grafo de unidades, listo para analizar/ejecutar. Es dueño de los recursos
 /// (fuentes y parsers) que mantienen vivo el AST; liberar con `deinit`.
 pub const Programa = struct {
-    stmts: []ast.Stmt = &.{},
+    unidades: []const *Unidad = &.{},
+    entrada: *Unidad = undefined,
+    arena: std.heap.ArenaAllocator,
     gpa: std.mem.Allocator,
     fuentes: std.ArrayListUnmanaged([]u8) = .empty,
     parsers: std.ArrayListUnmanaged(*parser.Parser) = .empty,
 
     pub fn deinit(self: *Programa) void {
-        if (self.stmts.len > 0) self.gpa.free(self.stmts);
+        self.arena.deinit();
         for (self.parsers.items) |p| {
             p.deinit();
             self.gpa.destroy(p);
@@ -42,13 +48,12 @@ const Cargador = struct {
     gpa: std.mem.Allocator,
     io: std.Io,
     prog: *Programa,
-    arena: std.heap.ArenaAllocator,
-    defs: std.ArrayListUnmanaged(ast.Stmt) = .empty,
-    cargados: std.StringHashMapUnmanaged(enum { cargando, cargado }) = .empty,
+    unidades: std.ArrayListUnmanaged(*Unidad) = .empty,
+    cargados: std.StringHashMapUnmanaged(*Unidad) = .empty,
     pila: std.ArrayListUnmanaged([]const u8) = .empty,
 
     fn a(self: *Cargador) std.mem.Allocator {
-        return self.arena.allocator();
+        return self.prog.arena.allocator();
     }
 
     /// Lee, tokeniza y parsea un archivo. El AST vive en el parser (retenido por
@@ -84,45 +89,79 @@ const Cargador = struct {
         return stmts;
     }
 
-    /// Carga las dependencias (`importar … desde`) de un programa ya parseado.
-    fn cargarDeps(self: *Cargador, dir: []const u8, programa: []const ast.Stmt) Err!void {
-        for (programa) |s| {
-            switch (s.dato) {
-                .importar => |imp| if (imp.desde) |desde| {
-                    const ruta = try self.rutaModulo(dir, desde);
-                    try self.cargarModulo(ruta, s.pos);
-                },
-                else => {},
+    fn cargarModulo(self: *Cargador, ruta: []const u8, pos: ast.Pos, entrada: bool) Err!*Unidad {
+        if (self.cargados.get(ruta)) |u| {
+            if (u.cargando) {
+                std.debug.print("{s}:{d}:{d}: ciclo de importación: ", .{ pos.archivo orelse ruta, pos.linea, pos.columna });
+                for (self.pila.items) |p| std.debug.print("{s} -> ", .{p});
+                std.debug.print("{s}\n", .{ruta});
+                return error.ErrorCarga;
             }
+            return u;
         }
-    }
-
-    /// Carga un módulo (si no está cargado): primero sus dependencias, luego acumula
-    /// sus definiciones (funcion/estructura/modelo).
-    fn cargarModulo(self: *Cargador, ruta: []const u8, pos: ast.Pos) Err!void {
-        if (try self.visitado(ruta, pos)) return;
-        try self.cargados.put(self.a(), ruta, .cargando);
+        const unidad = try self.a().create(Unidad);
+        unidad.* = .{ .ruta = ruta, .stmts = try self.parseArchivo(ruta) };
+        try self.cargados.put(self.a(), ruta, unidad);
         try self.pila.append(self.a(), ruta);
         defer self.pila.items.len -= 1;
-
-        const programa = try self.parseArchivo(ruta);
-        try self.cargarDeps(dirname(ruta), programa);
-        for (programa) |s| {
-            switch (s.dato) {
-                .funcion, .estructura, .modelo => try self.defs.append(self.a(), s),
-                else => {},
+        var nombres: std.StringHashMapUnmanaged(*const ast.Stmt) = .empty;
+        var enlaces: std.ArrayListUnmanaged(Enlace) = .empty;
+        for (unidad.stmts) |*s| {
+            try validarImportaciones(s.*, true);
+            const nombre: ?[]const u8 = switch (s.dato) {
+                .funcion => |f| f.nombre,
+                .estructura => |e| e.nombre,
+                .modelo => |m| m.nombre,
+                .declaracion => |d| d.nombre,
+                .importar => null,
+                else => blk: {
+                    if (!entrada) return fallo(s.pos, "sentencia de nivel superior no permitida en un módulo");
+                    break :blk null;
+                },
+            };
+            if (!entrada and s.dato == .declaracion and !s.dato.declaracion.fijo)
+                return fallo(s.pos, "solo fijo puede declarar valores globales de un módulo");
+            if (nombre) |n| {
+                if (nombres.contains(n)) return fallo(s.pos, "redefinición de nombre en el módulo");
+                try nombres.put(self.a(), n, s);
             }
         }
-        try self.cargados.put(self.a(), ruta, .cargado);
-    }
-
-    fn visitado(self: *Cargador, ruta: []const u8, pos: ast.Pos) Err!bool {
-        const estado = self.cargados.get(ruta) orelse return false;
-        if (estado == .cargado) return true;
-        std.debug.print("{s}:{d}:{d}: ciclo de importación: ", .{ pos.archivo orelse ruta, pos.linea, pos.columna });
-        for (self.pila.items) |p| std.debug.print("{s} -> ", .{p});
-        std.debug.print("{s}\n", .{ruta});
-        return error.ErrorCarga;
+        for (unidad.stmts) |*s| if (s.dato == .importar) {
+            const imp = s.dato.importar;
+            if (imp.desde) |desde| {
+                const destino = try self.cargarModulo(try self.rutaModulo(dirname(ruta), desde), s.pos, false);
+                var simbolo: ?*const ast.Stmt = null;
+                for (destino.stmts) |*d| {
+                    const n: ?[]const u8 = switch (d.dato) {
+                        .funcion => |f| if (f.exportar) f.nombre else null,
+                        .estructura => |e| if (e.exportar) e.nombre else null,
+                        .modelo => |m| if (m.exportar) m.nombre else null,
+                        else => null,
+                    };
+                    if (n) |v| if (std.mem.eql(u8, v, imp.que)) {
+                        simbolo = d;
+                        break;
+                    };
+                }
+                const d = simbolo orelse return fallo(s.pos, "símbolo no exportado por el módulo");
+                if (nombres.get(imp.que)) |previo| {
+                    if (previo == d) continue;
+                    return fallo(s.pos, "conflicto de nombre importado");
+                }
+                try nombres.put(self.a(), imp.que, d);
+                try enlaces.append(self.a(), .{ .nombre = imp.que, .unidad = destino, .simbolo = d });
+            } else {
+                if (nombres.get(imp.que)) |previo| {
+                    if (previo.dato == .importar and previo.dato.importar.desde == null) continue;
+                    return fallo(s.pos, "conflicto de nombre importado");
+                }
+                try nombres.put(self.a(), imp.que, s);
+            }
+        };
+        unidad.enlaces = try enlaces.toOwnedSlice(self.a());
+        unidad.cargando = false;
+        try self.unidades.append(self.a(), unidad);
+        return unidad;
     }
 
     fn canonicalizar(self: *Cargador, ruta: []const u8) Err![]const u8 {
@@ -154,28 +193,44 @@ fn dirname(ruta: []const u8) []const u8 {
     return ".";
 }
 
-/// Construye el programa combinado a partir del archivo de entrada. El llamador es
+/// Construye el grafo a partir del archivo de entrada. El llamador es
 /// dueño del `Programa` devuelto y debe liberarlo con `deinit`.
 pub fn construir(gpa: std.mem.Allocator, io: std.Io, ruta_entrada: []const u8) !Programa {
-    var prog = Programa{ .gpa = gpa };
+    var prog = Programa{ .gpa = gpa, .arena = std.heap.ArenaAllocator.init(gpa) };
     errdefer prog.deinit();
 
-    var c = Cargador{ .gpa = gpa, .io = io, .prog = &prog, .arena = std.heap.ArenaAllocator.init(gpa) };
-    defer c.arena.deinit();
-
+    var c = Cargador{ .gpa = gpa, .io = io, .prog = &prog };
     const ruta = try c.canonicalizar(ruta_entrada);
-    try c.cargados.put(c.a(), ruta, .cargando);
-    try c.pila.append(c.a(), ruta);
-    const entrada = try c.parseArchivo(ruta);
-    try c.cargarDeps(dirname(ruta), entrada);
-    try c.cargados.put(c.a(), ruta, .cargado);
-
-    // Combinado = definiciones de los módulos ++ programa de entrada completo.
-    const total = c.defs.items.len + entrada.len;
-    const combinado = try gpa.alloc(ast.Stmt, total);
-    std.mem.copyForwards(ast.Stmt, combinado[0..c.defs.items.len], c.defs.items);
-    std.mem.copyForwards(ast.Stmt, combinado[c.defs.items.len..], entrada);
-    prog.stmts = combinado;
-
+    prog.entrada = try c.cargarModulo(ruta, .{}, true);
+    prog.unidades = try c.unidades.toOwnedSlice(c.a());
     return prog;
+}
+
+fn fallo(pos: ast.Pos, mensaje: []const u8) Err {
+    std.debug.print("{s}:{d}:{d}: {s}\n", .{ pos.archivo orelse "programa", pos.linea, pos.columna, mensaje });
+    return error.ErrorCarga;
+}
+
+fn validarBloque(stmts: []const ast.Stmt) Err!void {
+    for (stmts) |s| try validarImportaciones(s, false);
+}
+fn validarImportaciones(s: ast.Stmt, superior: bool) Err!void {
+    switch (s.dato) {
+        .importar => if (!superior) return fallo(s.pos, "importar solo se permite a nivel superior"),
+        .funcion => |f| try validarBloque(f.cuerpo),
+        .modelo => |m| for (m.metodos) |f| {
+            try validarBloque(f.cuerpo);
+        },
+        .si => |v| {
+            for (v.ramas) |r| try validarBloque(r.cuerpo);
+            if (v.sino) |b| try validarBloque(b);
+        },
+        .mientras => |v| try validarBloque(v.cuerpo),
+        .para => |v| try validarBloque(v.cuerpo),
+        .intentar => |v| {
+            try validarBloque(v.cuerpo);
+            try validarBloque(v.captura);
+        },
+        else => {},
+    }
 }

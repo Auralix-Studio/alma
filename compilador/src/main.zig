@@ -128,14 +128,14 @@ fn requiereRuta(args: []const [:0]const u8, comando: []const u8) ![]const u8 {
 fn cmdEjecutar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
     var prog = try modulos.construir(gpa, io, ruta);
     defer prog.deinit();
-    try validarPrograma(gpa, ruta, prog.stmts);
+    try validarPrograma(gpa, ruta, &prog);
 
     var interp = try interprete.Interprete.init(gpa);
     defer interp.deinit();
     interp.io = io; // habilita el módulo `sistema` (archivos)
     var salida_io = io;
     interp.destino_salida = .{ .contexto = &salida_io, .escribir = enviarSalida };
-    interp.ejecutar(prog.stmts) catch |err| {
+    interp.ejecutarModulos(&prog) catch |err| {
         if (interp.diag) |d| std.debug.print("{s}:{d}:{d}: error de ejecución: {s}\n", .{ interp.diag_pos.archivo orelse ruta, interp.diag_pos.linea, interp.diag_pos.columna, d });
         return err;
     };
@@ -185,9 +185,9 @@ fn cmdCompilar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8, propio: boo
 
     var prog = try modulos.construir(gpa, io, ruta);
     defer prog.deinit();
-    try validarPrograma(gpa, ruta, prog.stmts);
+    try validarPrograma(gpa, ruta, &prog);
     if (propio) {
-        var intermedia = try ir.construir(gpa, prog.stmts);
+        var intermedia = try ir.construirModulos(gpa, &prog);
         defer intermedia.deinit();
         if (intermedia.diag) |diag| {
             std.debug.print("No se puede compilar: {s}\n", .{diag});
@@ -204,7 +204,7 @@ fn cmdCompilar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8, propio: boo
         try escribir(io, mensaje);
         return;
     }
-    const gen = try codegen_c.generar(arena, prog.stmts);
+    const gen = try codegen_c.generarModulos(arena, &prog);
     const fuente_c = gen.fuente_c orelse {
         std.debug.print("No se puede compilar todavía: {s}\n(por ahora, ese programa se ejecuta con 'alma ejecutar')\n", .{gen.diag orelse "construcción no soportada"});
         return error.ConstruccionNoSoportada;
@@ -247,8 +247,8 @@ fn cmdCompilar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8, propio: boo
 fn cmdIr(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
     var prog = try modulos.construir(gpa, io, ruta);
     defer prog.deinit();
-    try validarPrograma(gpa, ruta, prog.stmts);
-    var intermedia = try ir.construir(gpa, prog.stmts);
+    try validarPrograma(gpa, ruta, &prog);
+    var intermedia = try ir.construirModulos(gpa, &prog);
     defer intermedia.deinit();
     if (intermedia.diag) |diag| {
         std.debug.print("No se puede generar IR: {s}\n", .{diag});
@@ -271,14 +271,14 @@ fn sinExtension(ruta: []const u8) []const u8 {
 fn cmdAnalizar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
     var prog = try modulos.construir(gpa, io, ruta);
     defer prog.deinit();
-    try validarPrograma(gpa, ruta, prog.stmts);
+    try validarPrograma(gpa, ruta, &prog);
     try escribir(io, "Sin problemas.\n");
 }
 
-fn validarPrograma(gpa: std.mem.Allocator, ruta: []const u8, stmts: []const ast.Stmt) !void {
+fn validarPrograma(gpa: std.mem.Allocator, ruta: []const u8, prog: *const modulos.Programa) !void {
     var an = analizador.Analizador.init(gpa);
     defer an.deinit();
-    const diags = try an.analizar(stmts);
+    const diags = try an.analizarModulos(prog);
 
     if (diags.len == 0) {
         return;

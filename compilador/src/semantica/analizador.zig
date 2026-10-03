@@ -16,6 +16,7 @@ const std = @import("std");
 const lexer = @import("../lexico/lexer.zig");
 const parser = @import("../sintaxis/parser.zig");
 const ast = @import("../sintaxis/ast.zig");
+const modulos = @import("../modulos.zig");
 
 const Stmt = ast.Stmt;
 const Expr = ast.Expr;
@@ -90,6 +91,7 @@ fn nombreTipo(t: Tipo) []const u8 {
 }
 
 const Simbolo = struct {
+    importado: bool = false,
     clase: Clase,
     aridad: usize = 0,
     /// Tipo del valor (variables, parámetros; para funciones = tipo de retorno).
@@ -170,6 +172,29 @@ pub const Analizador = struct {
         return self.diagnosticos.toOwnedSlice(self.a());
     }
 
+    pub fn analizarModulos(self: *Analizador, programa: *const modulos.Programa) Error![]Diagnostico {
+        for (programa.unidades) |unidad| {
+            self.ambitos.items.len = 0;
+            try self.push();
+            try self.registrarNativas();
+            try self.push();
+            for (unidad.stmts) |*s| {
+                if (s.dato == .importar and s.dato.importar.desde != null) continue;
+                try self.registrarGlobal(s);
+                if (s.dato == .declaracion) {
+                    const d = s.dato.declaracion;
+                    try self.definir(d.nombre, .{ .clase = if (d.fijo) .constante else .variable, .tipo = if (d.tipo) |t| nombreATipo(t) else .desconocido });
+                }
+            }
+            for (unidad.enlaces) |enlace| {
+                try self.registrarGlobal(enlace.simbolo);
+                self.cima().getPtr(enlace.nombre).?.importado = true;
+            }
+            for (unidad.stmts) |s| try self.analizarStmt(s);
+        }
+        return self.diagnosticos.toOwnedSlice(self.a());
+    }
+
     fn registrarNativas(self: *Analizador) Error!void {
         const nombres = [_][]const u8{ "imprimir", "rango", "longitud", "agregar", "texto", "claves", "tiene", "error" };
         for (nombres) |n| try self.definir(n, .{ .clase = .nativa });
@@ -214,6 +239,9 @@ pub const Analizador = struct {
         self.pos_actual = s.pos;
         switch (s.dato) {
             .declaracion => |d| {
+                if (self.cima().get(d.nombre)) |sim| {
+                    if (sim.importado) try self.err("no se puede redefinir el nombre importado '{s}'", .{d.nombre});
+                }
                 try self.analizarExpr(d.valor);
                 const vt = self.tipoDeExpr(d.valor);
                 var tipo_var: Tipo = .desconocido;
@@ -232,7 +260,9 @@ pub const Analizador = struct {
                 switch (asig.objetivo.*) {
                     .identificador => |nombre| {
                         if (self.resolver(nombre)) |sim| {
-                            if (sim.clase == .constante) {
+                            if (sim.importado) {
+                                try self.err("no se puede reasignar el nombre importado '{s}'", .{nombre});
+                            } else if (sim.clase == .constante) {
                                 try self.err("no se puede reasignar la constante '{s}'", .{nombre});
                             } else if (sim.tipo != .desconocido) {
                                 const vt = self.tipoDeExpr(asig.valor);

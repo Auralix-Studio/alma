@@ -53,8 +53,9 @@ criterios de aceptación están en [PLAN-INDEPENDENCIA.md](../PLAN-INDEPENDENCIA
 
 ## Errores y limitaciones
 Los errores detectados devuelven código 1. Si falta Zig se conserva el C generado.
-El cargador actual incorpora todas las definiciones de cada módulo en un espacio de
-nombres compartido; aún no proporciona importación selectiva ni aislamiento.
+El cargador aísla los nombres por archivo y enlaza únicamente los símbolos
+exportados que se solicitan. Los backends nativos rechazan inicializadores
+globales y tipos fuera de su subconjunto; el intérprete admite esos módulos.
 El runtime C libera textos dinámicos mediante conteo de referencias e instrucciones
 de copia/liberación en la IR. Todavía falta unificar completamente otros aspectos
 de la semántica con el intérprete, incluido el formato decimal.

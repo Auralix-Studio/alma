@@ -3,12 +3,20 @@ const std = @import("std");
 const ast = @import("sintaxis/ast.zig");
 const ir = @import("ir.zig");
 const emision = @import("emision_c.zig");
+const modulos = @import("modulos.zig");
 
 /// El llamador libera fuente_c o diag con el allocator usado en generar.
 pub const Resultado = struct { fuente_c: ?[]u8 = null, diag: ?[]const u8 = null };
 
 pub fn generar(gpa: std.mem.Allocator, stmts: []const ast.Stmt) error{OutOfMemory}!Resultado {
     var programa = try ir.construir(gpa, stmts);
+    defer programa.deinit();
+    if (programa.diag) |diag| return .{ .diag = try gpa.dupe(u8, diag) };
+    return .{ .fuente_c = try emision.generar(gpa, &programa) };
+}
+
+pub fn generarModulos(gpa: std.mem.Allocator, prog: *const modulos.Programa) error{OutOfMemory}!Resultado {
+    var programa = try ir.construirModulos(gpa, prog);
     defer programa.deinit();
     if (programa.diag) |diag| return .{ .diag = try gpa.dupe(u8, diag) };
     return .{ .fuente_c = try emision.generar(gpa, &programa) };

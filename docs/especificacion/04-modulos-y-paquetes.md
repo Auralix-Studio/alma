@@ -2,7 +2,7 @@
 
 > **Documento:** `04-modulos-y-paquetes.md`
 > **Componente:** Compilador · Carga de módulos + manifiesto de proyecto
-> **Estado:** Borrador de trabajo `v0.1`
+> **Estado:** `v0.2`, aislamiento aprobado e implementado el 2026-10-03
 > **Fuente de verdad para:** `compilador/src/modulos.zig` y `compilador/src/paquete.zig`
 
 ## Módulos (programas multi-archivo)
@@ -17,29 +17,11 @@ importar SIMBOLO desde "ruta"
 La `ruta` es **relativa al archivo que importa** (se le agrega `.alma` si falta):
 `importar cuadrado desde "matematicas"` carga `matematicas.alma` de la misma carpeta.
 
-### Cómo funciona
-`alma ejecutar`/`alma analizar` **enlazan** el programa antes de correrlo: parten del
-archivo de entrada, cargan recursivamente los módulos referenciados y combinan **las
-definiciones** (`funcion`/`estructura`/`modelo`) de cada módulo con el archivo de entrada
-completo. La carga se cachea por ruta (evita duplicados y ciclos).
+`ejecutar`, `analizar`, `compilar` e `ir` comparten un grafo de unidades y enlaces
+a símbolos. La antigua inclusión plana v0.1 queda reemplazada por el contrato
+aprobado a continuación. Importar un archivo ya no hace visibles todos sus nombres.
 
-### Semántica v0.1 (honesto)
-- El modelo es de **inclusión plana**: se traen **todas** las definiciones de nivel
-  superior del módulo (no solo el símbolo nombrado en `importar`), en un espacio de
-  nombres compartido. Colisiones de nombres entre módulos → error de redefinición.
-- Solo se importan **definiciones**; las sentencias sueltas de nivel superior de un módulo
-  (y su eventual `principal`) no se ejecutan al importarlo.
-- `importar sistema` (sin `desde`) refiere a la librería estándar incorporada (hoy no-op:
-  sus funciones ya son globales).
-- **Diferido:** espacios de nombres reales por módulo, `exportar` selectivo estricto y
-  posiciones de error que indiquen el archivo.
-
-## Propuesta v0.2 — pendiente de confirmación (2026-10-03)
-
-Esta sección propone reemplazar la inclusión plana; no describe el comportamiento
-implementado. La descripción v0.1 anterior se conserva como referencia histórica.
-En particular, su comentario de que la biblioteca estándar es un no-op está
-desactualizado: la especificación 05 y el intérprete ya usan módulos incorporados.
+## Contrato v0.2
 
 ### Identidad y ciclos
 
@@ -63,7 +45,7 @@ funciones; no sustituirlo por una redefinición ni ignorarlo silenciosamente.
 - `importar S desde "ruta"` liga únicamente `S` en el importador. Los auxiliares,
   constantes e importaciones usados por `S` siguen accesibles en su módulo, sin
   filtrarse al importador. No hay importación comodín ni alias nuevos.
-- Propuesta recomendada: solo `exportar funcion`, `exportar estructura` y
+- Solo `exportar funcion`, `exportar estructura` y
   `exportar modelo` son públicos. Una solicitud de nombre privado o inexistente
   es error en el `importar`. Esto rompe ejemplos actuales con funciones públicas
   implícitas: se migrarán junto con sus pruebas tras aprobarlo.
@@ -109,13 +91,14 @@ con inicialización única; ciclo directo, indirecto y por la entrada; rutas
 diagnóstico con archivo original; módulo con `principal` que no se invoca al
 importarlo. Ejecutar el subconjunto compartido en intérprete y C.
 
-### Decisión solicitada
+### Validación
 
-Aprobar aislamiento por archivo, exports explícitos, `fijo` privado e
-inicialización descrita. Alternativa de compatibilidad: funciones y tipos
-públicos implícitos, manteniendo importación selectiva y auxiliares aislados;
-esta alternativa no ofrece privacidad explícita y no es la recomendada.
-La implementación espera confirmación, según la solicitud de trabajo.
+`compilador/pruebas-modulos.ps1` verifica estos casos mediante procesos reales.
+Los backends nativos conservan su subconjunto escalar: los inicializadores
+globales (`fijo` incluido), tipos y biblioteca estándar no soportados se
+diagnostican explícitamente. El intérprete sí inicializa las constantes privadas.
+Los IDs de función en la IR siguen el orden de unidades y declaraciones; cada
+función resuelve sus llamadas en su propia unidad sin reescribir nombres del AST.
 
 ## Paquetes (`alma.paquete`)
 

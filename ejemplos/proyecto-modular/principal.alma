@@ -1,6 +1,7 @@
 // Programa que usa funciones de otro archivo (módulo).
 importar sistema
 importar cuadrado desde "matematicas"
+importar cubo desde "matematicas"
 
 funcion principal()
     imprimir("Cuadrado de 7:")

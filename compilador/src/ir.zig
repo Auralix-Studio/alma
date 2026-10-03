@@ -2,6 +2,7 @@
 //! No contiene punteros al AST ni código C. Cada registro posee su valor.
 const std = @import("std");
 const ast = @import("sintaxis/ast.zig");
+const modulos = @import("modulos.zig");
 
 pub const Reg = usize;
 pub const Literal = union(enum) { entero: i64, decimal: f64, texto: []const u8, logico: bool, nulo };
@@ -261,20 +262,60 @@ const Constructor = struct {
         if (self.aridades.items[self.programa.entrada] != 0) return self.fallo("principal() no puede recibir parámetros");
         var funciones: std.ArrayListUnmanaged(Funcion) = .empty;
         for (stmts) |s| if (s.dato == .funcion) {
-            const f = s.dato.funcion;
-            self.variables = .{};
-            self.instrucciones = .empty;
-            self.registros = 0;
-            self.etiquetas = 0;
-            self.pos = s.pos;
-            for (f.params) |p| {
-                if (self.variables.contains(p.nombre)) return self.fallo("parámetro duplicado");
-                _ = try self.variable(p.nombre);
-            }
-            try self.bloque(f.cuerpo);
-            try self.emitir(.{ .retornar = try self.literal(.nulo) });
-            try funciones.append(self.a, .{ .nombre = try self.a.dupe(u8, f.nombre), .parametros = f.params.len, .registros = self.registros, .instrucciones = try self.instrucciones.toOwnedSlice(self.a) });
+            try funciones.append(self.a, try self.compilarFuncion(s, s.dato.funcion.nombre));
         };
+        self.programa.funciones = try funciones.toOwnedSlice(self.a);
+    }
+
+    fn compilarFuncion(self: *Constructor, s: ast.Stmt, nombre: []const u8) Error!Funcion {
+        const f = s.dato.funcion;
+        self.variables = .{};
+        self.instrucciones = .empty;
+        self.registros = 0;
+        self.etiquetas = 0;
+        self.pos = s.pos;
+        for (f.params) |p| {
+            if (self.variables.contains(p.nombre)) return self.fallo("parámetro duplicado");
+            _ = try self.variable(p.nombre);
+        }
+        try self.bloque(f.cuerpo);
+        try self.emitir(.{ .retornar = try self.literal(.nulo) });
+        return .{ .nombre = try self.a.dupe(u8, nombre), .parametros = f.params.len, .registros = self.registros, .instrucciones = try self.instrucciones.toOwnedSlice(self.a) };
+    }
+
+    fn construirModulos(self: *Constructor, prog: *const modulos.Programa) Error!void {
+        var ids: std.AutoHashMapUnmanaged(*const ast.Stmt.Funcion, usize) = .empty;
+        var entrada: ?usize = null;
+        for (prog.unidades) |unidad| for (unidad.stmts) |*s| {
+            switch (s.dato) {
+                .funcion => |*f| {
+                    if (f.asincrona) return self.fallo("las funciones asíncronas todavía no se compilan");
+                    const id = self.aridades.items.len;
+                    try ids.put(self.a, f, id);
+                    try self.aridades.append(self.a, f.params.len);
+                    if (unidad == prog.entrada and std.mem.eql(u8, f.nombre, "principal")) entrada = id;
+                },
+                .importar => {},
+                else => return self.fallo("el backend nativo no admite inicializadores globales, tipos ni sentencias fuera de funciones"),
+            }
+        };
+        self.programa.entrada = entrada orelse return self.fallo("falta la función principal() en el archivo de entrada");
+        if (self.aridades.items[self.programa.entrada] != 0) return self.fallo("principal() no puede recibir parámetros");
+        var funciones: std.ArrayListUnmanaged(Funcion) = .empty;
+        for (prog.unidades, 0..) |unidad, uid| {
+            self.nombres = .{};
+            for (unidad.stmts) |*s| if (s.dato == .funcion) {
+                try self.nombres.put(self.a, s.dato.funcion.nombre, ids.get(&s.dato.funcion).?);
+            };
+            for (unidad.enlaces) |enlace| {
+                if (enlace.simbolo.dato != .funcion) return self.fallo("el backend nativo solo importa funciones");
+                try self.nombres.put(self.a, enlace.nombre, ids.get(&enlace.simbolo.dato.funcion).?);
+            }
+            for (unidad.stmts) |s| if (s.dato == .funcion) {
+                const nombre = try std.fmt.allocPrint(self.a, "m{d}.{s}", .{ uid, s.dato.funcion.nombre });
+                try funciones.append(self.a, try self.compilarFuncion(s, nombre));
+            };
+        }
         self.programa.funciones = try funciones.toOwnedSlice(self.a);
     }
 };
@@ -284,6 +325,17 @@ pub fn construir(gpa: std.mem.Allocator, stmts: []const ast.Stmt) error{OutOfMem
     errdefer programa.deinit();
     var c = Constructor{ .a = programa.arena.allocator(), .programa = &programa };
     c.construir(stmts) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.NoSoportado => {},
+    };
+    return programa;
+}
+
+pub fn construirModulos(gpa: std.mem.Allocator, prog: *const modulos.Programa) error{OutOfMemory}!Programa {
+    var programa = Programa{ .arena = std.heap.ArenaAllocator.init(gpa) };
+    errdefer programa.deinit();
+    var c = Constructor{ .a = programa.arena.allocator(), .programa = &programa };
+    c.construirModulos(prog) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         error.NoSoportado => {},
     };

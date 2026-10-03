@@ -52,7 +52,7 @@ $r = Invocar @('ejecutar', $runtime)
 Comprobar ($r.Codigo -ne 0 -and $r.Texto.Contains('antes del error')) 'Se perdió la salida o el error de ejecución'
 
 [void](Guardar 'operaciones.alma' @'
-funcion doble(n: entero) -> entero
+exportar funcion doble(n: entero) -> entero
     retornar n * 2
 fin
 '@)
@@ -217,7 +217,7 @@ ProbarErrorRuntime 'division-overflow' "    a = -9223372036854775807 - 1`n    im
 ProbarErrorRuntime 'negacion-overflow' "    a = -9223372036854775807 - 1`n    imprimir(-a)" 'desbordamiento'
 ProbarErrorRuntime 'variable-no-inicializada' "    si falso`n        a = 1`n    fin`n    imprimir(a)" 'variable no definida'
 
-[void](Guardar 'modulo-error.alma' "funcion fallar()`n    imprimir(1 / 0)`nfin`n")
+[void](Guardar 'modulo-error.alma' "exportar funcion fallar()`n    imprimir(1 / 0)`nfin`n")
 $entradaError = Guardar 'entrada-error.alma' "importar fallar desde `"modulo-error`"`nfuncion principal()`n    fallar()`nfin`n"
 $r = Invocar @('ejecutar', $entradaError)
 Comprobar ($r.Codigo -eq 1 -and $r.Texto.Contains('modulo-error.alma:2:')) 'El intérprete perdió el archivo de origen'
@@ -226,7 +226,7 @@ Comprobar ($r.Codigo -eq 0) $r.Texto
 $salidaError = & (Join-Path $casos 'entrada-error.exe') 2>&1
 $codigoError = $LASTEXITCODE
 Comprobar ($codigoError -eq 1 -and ($salidaError | Out-String).Contains('modulo-error.alma:2:')) 'El nativo perdió el archivo de origen'
-[void](Guardar 'modulo-error.alma' "funcion fallar()`n    imprimir(desconocido)`nfin`n")
+[void](Guardar 'modulo-error.alma' "exportar funcion fallar()`n    imprimir(desconocido)`nfin`n")
 $r = Invocar @('analizar', $entradaError)
 Comprobar ($r.Codigo -eq 1 -and $r.Texto.Contains('modulo-error.alma:2:')) 'El analizador perdió el archivo de origen'
 

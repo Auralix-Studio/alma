@@ -15,6 +15,7 @@ const parser = @import("../sintaxis/parser.zig");
 const ast = @import("../sintaxis/ast.zig");
 const tk = @import("../lexico/token.zig");
 const limites = @import("../limites.zig");
+const modulos = @import("../modulos.zig");
 
 const Expr = ast.Expr;
 const Stmt = ast.Stmt;
@@ -176,6 +177,7 @@ pub const Interprete = struct {
 
     arena: std.heap.ArenaAllocator,
     global: *Entorno,
+    entornos_funciones: std.AutoHashMapUnmanaged(*const Stmt.Funcion, *Entorno) = .empty,
     salida: Buffer = .empty,
     /// null captura la salida para pruebas; un destino la recibe al imprimir.
     destino_salida: ?DestinoSalida = null,
@@ -325,6 +327,44 @@ pub const Interprete = struct {
     }
 
     // — Ejecución —
+
+    pub fn ejecutarModulos(self: *Interprete, programa: *const modulos.Programa) ErrorEjec!void {
+        const nativas = self.global;
+        var entornos: std.AutoHashMapUnmanaged(*const modulos.Unidad, *Entorno) = .empty;
+        for (programa.unidades) |unidad| {
+            const env = try self.nuevoEntorno(nativas);
+            try entornos.put(self.a(), unidad, env);
+            self.global = env;
+            // Declaraciones y enlaces preceden a cualquier inicializador.
+            for (unidad.stmts) |*s| switch (s.dato) {
+                .funcion => |*f| {
+                    try env.definir(self.a(), f.nombre, .{ .funcion = f });
+                    try self.entornos_funciones.put(self.a(), f, env);
+                },
+                .estructura => |e| try self.registrarTipo(e.nombre, false, e.campos, &sin_metodos),
+                .modelo => |m| try self.registrarTipo(m.nombre, true, m.campos, m.metodos),
+                .importar => |imp| if (imp.desde == null) {
+                    self.stmt_pos = s.pos;
+                    try self.procesarImportar(imp);
+                },
+                else => {},
+            };
+            for (unidad.enlaces) |enlace| {
+                const origen = entornos.get(enlace.unidad).?;
+                try env.definir(self.a(), enlace.nombre, origen.obtener(enlace.nombre).?);
+            }
+            for (unidad.stmts) |*s| switch (s.dato) {
+                .funcion, .estructura, .modelo, .importar => {},
+                else => _ = try self.ejecStmt(s, env),
+            };
+        }
+        self.global = entornos.get(programa.entrada).?;
+        // Solo una definición propia de principal es punto de entrada.
+        for (programa.entrada.stmts) |*s| if (s.dato == .funcion and std.mem.eql(u8, s.dato.funcion.nombre, "principal")) {
+            _ = try self.llamarFuncion(&s.dato.funcion, &.{});
+            break;
+        };
+    }
 
     pub fn ejecutar(self: *Interprete, programa: []Stmt) ErrorEjec!void {
         for (programa) |*s| {
@@ -479,6 +519,7 @@ pub const Interprete = struct {
         const t = try self.a().create(TipoDef);
         t.* = .{ .nombre = nombre, .es_referencia = es_referencia, .campos = campos, .metodos = metodos };
         try self.global.definir(self.a(), nombre, .{ .tipo = t });
+        for (metodos) |*metodo| try self.entornos_funciones.put(self.a(), metodo, self.global);
     }
 
     /// Copia según la semántica del tipo: `estructura` se clona en profundidad (valor);
@@ -591,6 +632,9 @@ pub const Interprete = struct {
         if (args.len != f.params.len) {
             return self.fallar("'{s}' espera {d} argumento(s), recibió {d}", .{ f.nombre, f.params.len, args.len });
         }
+        const anterior = self.global;
+        self.global = self.entornos_funciones.get(f) orelse self.global;
+        defer self.global = anterior;
         const local = try self.nuevoEntorno(self.global);
         for (f.params, args) |p, arg| try local.definir(self.a(), p.nombre, try self.copiarValor(arg));
         const flujo = try self.ejecBloque(f.cuerpo, local);
@@ -613,6 +657,9 @@ pub const Interprete = struct {
         if (args.len != f.params.len) {
             return self.fallar("'{s}' espera {d} argumento(s), recibió {d}", .{ f.nombre, f.params.len, args.len });
         }
+        const anterior = self.global;
+        self.global = self.entornos_funciones.get(f) orelse self.global;
+        defer self.global = anterior;
         const local = try self.nuevoEntornoConSelf(self.global, inst);
         try local.definir(self.a(), "yo", .{ .instancia = inst });
         for (f.params, args) |p, arg| try local.definir(self.a(), p.nombre, try self.copiarValor(arg));

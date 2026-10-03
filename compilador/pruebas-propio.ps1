@@ -73,7 +73,7 @@ funcion principal()
 fin
 '@ "-9223372036854775808 9223372036854775807 0 -2 -1`nverdadero verdadero")
 
-    [void](Guardar 'modulo' "funcion doble(n: entero) -> entero`n    retornar n * 2`nfin`n")
+    [void](Guardar 'modulo' "exportar funcion doble(n: entero) -> entero`n    retornar n * 2`nfin`n")
     [void](Probar 'funciones' @'
 importar doble desde "modulo"
 funcion factorial(n: entero) -> entero
