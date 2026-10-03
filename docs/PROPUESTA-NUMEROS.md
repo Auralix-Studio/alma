@@ -1,6 +1,6 @@
-# Semántica numérica compartida — pendiente de aprobación
+# Semántica numérica compartida — implementada
 
-Fecha: 2026-10-03. Este documento es una propuesta; no cambia los motores.
+Fecha: 2026-10-03. **Estado:** implementada en el intérprete, la IR y el runtime C (commit `5b0a5a5`; JSON en `693c173`) según el encargo que remite a este documento. El backend propio sigue rechazando decimales (ver [memoria nativa](PROPUESTA-MEMORIA-NATIVA.md) §3). La redacción original se conserva abajo como especificación.
 
 ## Formato decimal
 

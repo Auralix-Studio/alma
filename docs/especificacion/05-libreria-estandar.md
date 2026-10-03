@@ -22,8 +22,8 @@ imprimir(matematicas.raiz(2.0))   // 1.4142135623730951
 | `PI`, `E` | constantes |
 | `raiz(x)` | raíz cuadrada |
 | `potencia(base, exp)` | potencia |
-| `absoluto(x)` | valor absoluto (conserva entero/decimal) |
-| `piso(x)`, `techo(x)`, `redondear(x)` | → entero |
+| `absoluto(x)` | valor absoluto (conserva entero/decimal); `absoluto` del mínimo i64 desborda |
+| `piso(x)`, `techo(x)`, `redondear(x)` | → entero; NaN, infinito o fuera de i64 es un error capturable |
 | `minimo(a, b)`, `maximo(a, b)` | menor / mayor |
 | `aleatorio()` | decimal en [0, 1) |
 
@@ -44,9 +44,12 @@ imprimir(matematicas.raiz(2.0))   // 1.4142135623730951
 | `leer_archivo(ruta)` | → texto con el contenido |
 | `escribir_archivo(ruta, contenido)` | escribe el archivo |
 | `existe(ruta)` | → logico |
-| `salir(codigo)` | termina el programa con ese código |
+| `salir()` / `salir(codigo)` | termina el programa; `codigo` entero entre 0 y 255 |
 
 Las rutas son relativas al directorio de trabajo. Requiere E/S (disponible en `alma ejecutar`).
+`leer_archivo` rechaza archivos mayores que el tope de lectura (100 MB por defecto,
+`alma ejecutar archivo.alma --limite-lectura=BYTES`). `escribir_archivo` no tiene
+sandbox: puede escribir cualquier ruta accesible para el usuario.
 
 ## `json`
 | Miembro | Descripción |
@@ -57,8 +60,16 @@ Las rutas son relativas al directorio de trabajo. Requiere E/S (disponible en `a
 `analizar` admite hasta 64 contenedores abiertos, contando conjuntamente objetos
 y arreglos. Los escalares no suman profundidad. Entrar en el contenedor 65
 produce el error capturable `JSON inválido: límite de anidamiento excedido`.
-El contador se restaura al salir, también en errores. Este límite no cambia
-todavía `serializar`, que requiere protección separada frente a ciclos.
+El contador se restaura al salir, también en errores. `serializar` (y `imprimir`/
+`texto`) rechazan más de 64 niveles de anidamiento, lo que también cubre ciclos
+(`agregar(l, l)`), con un error capturable.
+
+`analizar` admite los escapes `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t` y `\uXXXX` (con pares
+sustitutos, convertidos a UTF-8); otro escape es `JSON inválido`. Un número sin
+punto ni exponente se lee como entero si cabe en i64 (`-0` se lee como decimal
+para conservar su signo). `serializar` escapa los bytes de control como `\u00XX`,
+escribe los decimales con el formato canónico de
+[la propuesta numérica](../PROPUESTA-NUMEROS.md) y rechaza `nan`/`inf`.
 
 ## `red` (cliente HTTP/HTTPS)
 | Miembro | Descripción |
@@ -73,11 +84,17 @@ La respuesta es un diccionario: `estado` (entero, p.ej. 200), `ok` (logico, 2xx)
 `cuerpo` (texto). Soporta HTTPS con verificación de certificados del sistema. Combina bien
 con `json.analizar(respuesta["cuerpo"])`.
 
+Límites: el cuerpo de la respuesta se acota a 50 MB (`--limite-red=BYTES`); superarlo
+es un error capturable. Nombres de cabecera vacíos o con `:`, y nombres o valores con
+CR/LF, se rechazan (evita inyección de cabeceras). **No hay timeout** todavía: ver
+[la propuesta de red](../PROPUESTA-RED-TLS.md). `codificar_url(texto)` codifica todo
+byte fuera de `A-Z a-z 0-9 - _ . ~` como `%XX`.
+
 ## Representación de módulos
 Un módulo importado es un valor de tipo *módulo*: un espacio de nombres con sus miembros
 (funciones y constantes). `matematicas.raiz` resuelve el miembro `raiz`; llamarlo lo ejecuta.
 
 ## Diferido
 `tiempo`/`fecha`, argumentos de línea de comandos, variables de entorno, y más operaciones
-de `sistema`; en `red`, encabezados personalizados y otros métodos (PUT/DELETE). `cadena`
+de `sistema`; en `red`, timeout y otros métodos (PUT/DELETE). `cadena`
 transforma mayúsculas/minúsculas solo en ASCII (Unicode completo pendiente).

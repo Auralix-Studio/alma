@@ -1,6 +1,9 @@
 # Alma: camino a un compilador independiente
 
-Actualizado: 2026-10-02. Este documento distingue implementación de objetivos.
+Actualizado: 2026-10-03. Este documento distingue implementación de objetivos.
+Estado actual, hallazgos y orden de trabajo: [AUDITORIA.md](AUDITORIA.md) y
+[HOJA-DE-RUTA.md](HOJA-DE-RUTA.md). Nivel de independencia: **1 parcial** (backend
+propio sin herramientas externas solo para el subconjunto escalar en Windows x64).
 
 ## Objetivo
 
@@ -17,12 +20,12 @@ arquitectura requiere soporte explícito; no se promete compatibilidad universal
 
 - `ejecutar`, `analizar` y `compilar` comparten el análisis semántico obligatorio.
 - `compilar` carga funciones de módulos `.alma` con el cargador existente antes
-  de generar C. Solo se admite el subconjunto nativo actual. El cargador incorpora
-  todas las definiciones del módulo: todavía no proporciona aislamiento de nombres.
+  de generar C. Solo se admite el subconjunto nativo actual. (Más tarde se añadió
+  aislamiento por archivo con `exportar`/importación selectiva; ver espec. 04.)
 - Los errores detectados del CLI terminan con código 1, después de liberar sus recursos.
 - Una ejecución fallida conserva la salida acumulada antes del error.
 - Las comparaciones entre dos enteros `i64` no pasan por `f64` en ninguno de los
-  dos motores. Las comparaciones mixtas entero/decimal siguen convirtiendo a decimal.
+  dos motores. (Desde 2026-10-03 las mixtas entero/decimal también son exactas.)
 - `pruebas-cli.ps1` comprueba procesos reales, módulos y concordancia de resultados.
 
 Por defecto `alma compilar` utiliza `zig cc`. Ya existe un generador propio experimental
@@ -55,11 +58,14 @@ El autohospedaje todavía está pendiente.
 
 ## Deuda conocida
 
-El intérprete conserva memoria en una arena hasta finalizar; no implementa ARC.
-El runtime C ya libera textos dinámicos mediante conteo de referencias, pero todavía
-no compila objetos y colecciones. Hay diferencias pendientes en formato decimal y
-otros aspectos de tipos/ámbitos. Async es síncrono. Estas limitaciones
-impiden presentar la versión actual como estable o de consumo acotado.
+Actualizado 2026-10-03. El intérprete libera memoria con un GC de marcado y barrido
+(ya no retiene todo en una arena). El runtime C libera textos dinámicos con conteo
+de referencias, pero no compila objetos ni colecciones. El formato decimal, las
+comparaciones mixtas, el mínimo i64 y los escapes ya coinciden entre intérprete y C
+(pruebas diferenciales). Siguen abiertas: igualdad de referencias, orden de
+evaluación en asignaciones indexadas, escapes desconocidos, timeout de red y todo
+el lenguaje no escalar en el backend propio. Async es síncrono. Estas limitaciones
+impiden presentar la versión actual como estable.
 
 ## Segunda mejora: errores del runtime y aritmética
 
@@ -113,9 +119,14 @@ Con Zig 0.16 accesible en el PATH, desde `compilador`:
 ```powershell
 zig build test
 zig build
+zig build diferencial
+./pruebas-limites.ps1
 ./pruebas-cli.ps1
 ./pruebas-propio.ps1
 ```
+
+Los resultados de la última verificación están en
+[INFORME-ENDURECIMIENTO.md](INFORME-ENDURECIMIENTO.md).
 
 Las pruebas CLI conservan sus casos generados bajo `.zig-cache/pruebas-cli` para
 inspección. No requieren red ni modifican instalaciones del usuario.

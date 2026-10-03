@@ -1,6 +1,6 @@
 # IR de Alma y backend propio Windows x64
 
-Estado: experimental, 2026-10-02. Implementación: `ir.zig`, `emision_c.zig`,
+Estado: experimental, actualizado 2026-10-03. Implementación: `ir.zig`, `emision_c.zig`,
 `runtime/escalar.h` y `codegen_pe.zig`.
 
 ## Uso
@@ -30,19 +30,33 @@ el propio rechaza lo que todavía no soporta antes de escribir el ejecutable.
 - Operadores enteros comprobados, comparaciones y operadores lógicos con cortocircuito.
 - Variables, `si`, `mientras`, `romper`, `continuar`, funciones y recursión.
 - Funciones importadas de archivos Alma y `imprimir` con múltiples argumentos.
-- Evaluación de izquierda a derecha, detección de variables sin inicializar y salida
-  inmediata. Los errores se escriben a stderr y terminan con código 1.
+- Evaluación de izquierda a derecha y detección de variables sin inicializar.
+- Límite de 64 llamadas activas, igual que el intérprete y el runtime C: al
+  superarlo, `desbordamiento de pila` en stderr y código 1.
+- Salida por un búfer de 4 KiB en `.data` (un `WriteFile` por búfer), vaciado al
+  terminar y antes de cualquier error, de modo que lo impreso antes del error se
+  conserva. Los errores se escriben a stderr y terminan con código 1.
 
 No admite decimales, conversión `texto(...)`, concatenación dinámica, colecciones,
 objetos, biblioteca estándar, captura de errores ni concurrencia. La inferencia
 conservadora de tipos detecta concatenaciones posibles también entre funciones.
-Los marcos de función están limitados a 4096 bytes en esta versión. La compilación
-puede rechazar programas con muchas expresiones hasta implementar reutilización de
-registros y soporte de marcos mayores.
+Cada registro IR ocupa una ranura de 16 bytes; las variables tienen ranura propia y
+los temporales comparten ranuras cuando sus vidas no se solapan (`ir.Funcion.variables`
+distingue unos de otros). Los marcos admiten hasta 128 KiB: el prólogo sondea cada
+página para respetar la página de guarda de Windows.
 
 Los errores del backend propio aún no incluyen archivo y línea. El backend C y el
 intérprete sí conservan esa información al cargar módulos. Los ejecutables propios
-usan base fija (sin relocaciones/ASLR); el formato y ABI internos son experimentales.
+son reubicables (todo el código es relativo a RIP) y declaran `DYNAMIC_BASE` y
+`HIGH_ENTROPY_VA` con un bloque de reubicación de relleno, por lo que Windows los
+carga en una base aleatoria (ASLR). Todo el código, incluidas las rutinas de error
+del runtime, tiene UNWIND_INFO en `.pdata`. Los textos literales se deduplican.
+La salida es determinista byte a byte. El formato y ABI internos son experimentales.
+
+Lo que el backend propio aún no admite se rechaza antes de escribir el ejecutable,
+sin recurrir al backend C. La ampliación (decimales, memoria dinámica, colecciones,
+objetos, errores) espera la decisión de [memoria nativa](../PROPUESTA-MEMORIA-NATIVA.md);
+Linux, la de [ELF](../PROPUESTA-ELF-LINUX.md).
 
 ## Representación intermedia
 
@@ -73,6 +87,10 @@ zig build test
 ./pruebas-cli.ps1
 ./pruebas-propio.ps1
 ```
+
+`zig build diferencial` ejecuta `pruebas-diferenciales/casos` con el intérprete, el
+backend C y, en Windows x64, el backend propio, y compara stdout byte a byte y el
+código de salida (ver la cabecera de `diferencial.zig`).
 
 Las pruebas CLI comparan interpretación y C y recompilan casos de texto con
 `ALMA_VERIFICAR_MEMORIA` y `ALMA_LIMITE_TEXTOS=32`. Comprueban ausencia de textos vivos

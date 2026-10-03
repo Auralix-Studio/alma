@@ -222,9 +222,16 @@ reservados. Esto mantiene el conjunto de keywords pequeño y evita rigidez.
   `v0.1`. 🟡`[PROP]` (interpolación tipo `"Hola {nombre}"` queda como futura).
 - 🟡`[PROP]` No hay tipo carácter separado; un carácter es un `texto` de longitud 1.
 
-#### Propuesta de escapes v0.2 (2026-10-03, pendiente de confirmación)
+#### Propuesta de escapes v0.2 (2026-10-03)
 
-Unificar la decodificación del intérprete y la IR con esta lista cerrada:
+**Implementado** (commit `5b0a5a5`): intérprete, IR (backends C y propio) y
+pruebas comparten un único decodificador (`compilador/src/numeros.zig`) con
+esta lista; `\0` produce un byte NUL que se conserva al imprimir, medir y
+concatenar, y JSON lo serializa como `\u0000`. **Pendiente de confirmación:**
+rechazar los escapes desconocidos; hoy todos los motores conservan el carácter y
+descartan la barra (`"\q"` → `q`). `\u{...}` sigue diferido.
+
+Lista cerrada:
 
 | Escape | Bytes resultantes |
 |---|---|

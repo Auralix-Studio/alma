@@ -1,6 +1,6 @@
-# Memoria del intérprete — decisión pendiente
+# Memoria del intérprete — decisión tomada: (b)
 
-Fecha: 2026-10-03. Propuesta; no implementa ARC, GC ni VM.
+Fecha: 2026-10-03. **Estado:** se implementó la opción (b), GC de marcado y barrido no móvil con raíces explícitas y recolección solo en puntos seguros (commits `21a5d95` y siguientes; ver `ejecucion/interprete.zig` y `ejecucion/memoria_gc.zig`). La arena solo conserva `TipoDef`. El backend propio tiene su propia propuesta: [PROPUESTA-MEMORIA-NATIVA.md](PROPUESTA-MEMORIA-NATIVA.md).
 
 ## Punto de partida
 
