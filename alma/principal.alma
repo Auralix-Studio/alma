@@ -104,7 +104,7 @@ funcion tendencias(region: texto) -> diccionario
         retornar {"estado": falso, "error": "Se requiere una región para buscar."}
     fin
     intentar
-        cuerpo_post = "region=" + region + "&count=12&cursor=0&web=1&hd=1"
+        cuerpo_post = "region=" + red.codificar_url(region) + "&count=12&cursor=0&web=1&hd=1"
         respuesta = red.publicar(BASE + "/api/feed/list/", cuerpo_post, cabeceras())
         lista = json.analizar(respuesta["cuerpo"])["data"]
         resultados = []

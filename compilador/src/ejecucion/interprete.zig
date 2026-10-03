@@ -244,6 +244,9 @@ pub const Interprete = struct {
     io: ?std.Io = null,
     /// Generador pseudoaleatorio (para `matematicas.aleatorio`), sembrado perezosamente.
     prng: ?std.Random.DefaultPrng = null,
+    /// Topes de lectura configurables (CLI: --limite-lectura, --limite-red).
+    limite_archivo: usize = limites.archivo_datos,
+    limite_red: usize = limites.red_respuesta,
 
     pub fn init(child: std.mem.Allocator) !Interprete {
         const memoria = try child.create(MemoriaGc);
@@ -1512,7 +1515,7 @@ fn sisLeerArchivo(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     const ruta = try interp.comoTexto(args[0], "ruta");
     const io = try ioDe(interp);
     const cwd: std.Io.Dir = .cwd();
-    const datos = cwd.readFileAlloc(io, ruta, interp.allocator, @enumFromInt(limites.archivo_datos)) catch |err| return interp.fallar("no se pudo leer '{s}': {s}", .{ ruta, @errorName(err) });
+    const datos = cwd.readFileAlloc(io, ruta, interp.allocator, .limited(interp.limite_archivo)) catch |err| return interp.fallar("no se pudo leer '{s}': {s}", .{ ruta, @errorName(err) });
     try interp.registrarGc(.{ .texto = datos });
     return .{ .texto = datos };
 }
@@ -1795,6 +1798,9 @@ fn jsonSerializar(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
 // — Librería estándar: red (cliente HTTP/HTTPS) —
 
 /// Realiza una petición HTTP y devuelve un diccionario {estado, ok, cuerpo}.
+/// El cuerpo de la respuesta se acota a `interp.limite_red` bytes (StreamTooLong).
+/// La librería std 0.16 no expone un timeout de petición en std.http.Client: ver
+/// docs/PROPUESTA-RED-TLS.md; `limites.red_timeout_ms` queda reservado.
 fn redPeticion(interp: *Interprete, url: []const u8, metodo: std.http.Method, payload: ?[]const u8, extra: []const std.http.Header) ErrorEjec!Valor {
     const io = try ioDe(interp);
     const gpa = interp.arena.child_allocator;
@@ -1802,21 +1808,15 @@ fn redPeticion(interp: *Interprete, url: []const u8, metodo: std.http.Method, pa
     var client: std.http.Client = .{ .allocator = gpa, .io = io };
     defer client.deinit();
 
-    var acumulador = std.Io.Writer.Allocating.init(gpa);
-    defer acumulador.deinit();
+    const respuesta = peticionAcotada(&client, gpa, url, metodo, payload, extra, interp.limite_red) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.StreamTooLong => return interp.fallar("la respuesta de '{s}' supera el límite de {d} bytes", .{ url, interp.limite_red }),
+        else => return interp.fallar("error de red al pedir '{s}': {s}", .{ url, @errorName(err) }),
+    };
+    defer gpa.free(respuesta.cuerpo);
 
-    // Timeout de conexión por defecto en std.http.Client de Zig no está expuesto
-    // directamente en FetchOptions en esta versión.
-    const resultado = client.fetch(.{
-        .location = .{ .url = url },
-        .method = metodo,
-        .payload = payload,
-        .extra_headers = extra,
-        .response_writer = &acumulador.writer,
-    }) catch |err| return interp.fallar("error de red al pedir '{s}': {s}", .{ url, @errorName(err) });
-
-    const codigo: i64 = @intFromEnum(resultado.status);
-    const cuerpo = try interp.copiarTexto(acumulador.written());
+    const codigo: i64 = @intFromEnum(respuesta.estado);
+    const cuerpo = try interp.copiarTexto(respuesta.cuerpo);
 
     const d = try interp.nuevoDiccionario();
     try d.put(interp.allocator, "estado", .{ .entero = codigo });
@@ -1825,7 +1825,60 @@ fn redPeticion(interp: *Interprete, url: []const u8, metodo: std.http.Method, pa
     return .{ .diccionario = d };
 }
 
+/// Igual que std.http.Client.fetch, pero lee el cuerpo con un tope de bytes en
+/// lugar de acumularlo sin límite.
+fn peticionAcotada(
+    client: *std.http.Client,
+    gpa: std.mem.Allocator,
+    url: []const u8,
+    metodo: std.http.Method,
+    payload: ?[]const u8,
+    extra: []const std.http.Header,
+    limite: usize,
+) !struct { estado: std.http.Status, cuerpo: []u8 } {
+    const uri = try std.Uri.parse(url);
+    var req = try client.request(metodo, uri, .{
+        .redirect_behavior = if (payload == null) @enumFromInt(3) else .unhandled,
+        .extra_headers = extra,
+        .keep_alive = false,
+    });
+    defer req.deinit();
+
+    if (payload) |datos| {
+        req.transfer_encoding = .{ .content_length = datos.len };
+        var body = try req.sendBodyUnflushed(&.{});
+        try body.writer.writeAll(datos);
+        try body.end();
+        try req.connection.?.flush();
+    } else {
+        try req.sendBodiless();
+    }
+
+    var redirect_buffer: [8 * 1024]u8 = undefined;
+    var response = try req.receiveHead(if (payload == null) &redirect_buffer else &.{});
+    const estado = response.head.status;
+
+    const decompress_buffer: []u8 = switch (response.head.content_encoding) {
+        .identity => &.{},
+        .zstd => try gpa.alloc(u8, std.compress.zstd.default_window_len),
+        .deflate, .gzip => try gpa.alloc(u8, std.compress.flate.max_window_len),
+        .compress => return error.UnsupportedCompressionMethod,
+    };
+    defer gpa.free(decompress_buffer);
+
+    var transfer_buffer: [64]u8 = undefined;
+    var decompress: std.http.Decompress = undefined;
+    const reader = response.readerDecompressing(&transfer_buffer, &decompress, decompress_buffer);
+    const cuerpo = reader.allocRemaining(gpa, .limited(limite)) catch |err| switch (err) {
+        error.ReadFailed => return response.bodyErr().?,
+        else => |e| return e,
+    };
+    return .{ .estado = estado, .cuerpo = cuerpo };
+}
+
 /// Convierte un diccionario Alma (nombre -> valor texto) en cabeceras HTTP.
+/// Rechaza nombres vacíos o con ':' y cualquier CR/LF: evita inyección de
+/// cabeceras y los assert de std.http.Client que abortarían el proceso.
 fn cabecerasDe(interp: *Interprete, v: Valor) ErrorEjec![]const std.http.Header {
     const d = switch (v) {
         .diccionario => |dd| dd,
@@ -1834,7 +1887,12 @@ fn cabecerasDe(interp: *Interprete, v: Valor) ErrorEjec![]const std.http.Header 
     const hs = try interp.allocator.alloc(std.http.Header, d.count());
     errdefer interp.allocator.free(hs);
     for (d.keys(), 0..) |k, i| {
-        hs[i] = .{ .name = k, .value = try interp.comoTexto(d.get(k).?, "valor de cabecera") };
+        const valor = try interp.comoTexto(d.get(k).?, "valor de cabecera");
+        if (k.len == 0 or std.mem.indexOfAny(u8, k, ":\r\n") != null)
+            return interp.fallar("nombre de cabecera inválido: '{s}'", .{k});
+        if (std.mem.indexOfAny(u8, valor, "\r\n") != null)
+            return interp.fallar("el valor de la cabecera '{s}' contiene un salto de línea", .{k});
+        hs[i] = .{ .name = k, .value = valor };
     }
     return hs;
 }
@@ -2696,4 +2754,25 @@ fn probarGcSinMemoria(a: std.mem.Allocator) !void {
 
 test "GC conserva propiedad y libera recursos ante fallos de asignacion" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, probarGcSinMemoria, .{});
+}
+
+test "red: cabeceras con CR/LF, ':' o nombre vacio se rechazan sin abortar" {
+    var interp = try Interprete.init(std.testing.allocator);
+    defer interp.deinit();
+    const casos = [_]struct { nombre: []const u8, valor: []const u8 }{
+        .{ .nombre = "X-Valor", .valor = "a\r\nInyectada: 1" },
+        .{ .nombre = "X:Nombre", .valor = "a" },
+        .{ .nombre = "X\nNombre", .valor = "a" },
+        .{ .nombre = "", .valor = "a" },
+    };
+    for (casos) |caso| {
+        const d = try interp.nuevoDiccionario();
+        try d.put(interp.allocator, caso.nombre, .{ .texto = caso.valor });
+        try std.testing.expectError(error.ErrorEjecucion, cabecerasDe(&interp, .{ .diccionario = d }));
+    }
+    const valido = try interp.nuevoDiccionario();
+    try valido.put(interp.allocator, "Content-Type", .{ .texto = "application/json" });
+    const hs = try cabecerasDe(&interp, .{ .diccionario = valido });
+    defer interp.allocator.free(hs);
+    try std.testing.expectEqualStrings("application/json", hs[0].value);
 }

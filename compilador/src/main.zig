@@ -37,7 +37,9 @@ pub fn main(init: process.Init.Minimal) void {
 fn ejecutarCli(init: process.Init.Minimal) !void {
     var debug_alloc: std.heap.DebugAllocator(.{}) = .init;
     defer { if (builtin.mode == .Debug) _ = debug_alloc.deinit(); }
-    const gpa = if (builtin.mode == .Debug) debug_alloc.allocator() else std.heap.page_allocator;
+    // Release: allocator de propósito general (page_allocator reservaba una página
+    // por cada objeto pequeño del intérprete).
+    const gpa = if (builtin.mode == .Debug) debug_alloc.allocator() else std.heap.smp_allocator;
 
     var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena_state.deinit();
@@ -60,7 +62,11 @@ fn ejecutarCli(init: process.Init.Minimal) !void {
     const comando = args[1];
     if (esIgual(comando, "ejecutar")) {
         const ruta = try requiereRuta(args, "ejecutar");
-        try cmdEjecutar(io, gpa, ruta);
+        const topes = Topes.parse(args[3..]) catch {
+            std.debug.print("Uso: alma ejecutar <archivo.alma> [--limite-lectura=BYTES] [--limite-red=BYTES]\n", .{});
+            return error.OpcionesInvalidas;
+        };
+        try cmdEjecutar(io, gpa, ruta, topes);
     } else if (esIgual(comando, "tokens")) {
         const ruta = try requiereRuta(args, "tokens");
         try cmdTokens(io, gpa, ruta);
@@ -124,7 +130,25 @@ fn requiereRuta(args: []const [:0]const u8, comando: []const u8) ![]const u8 {
 
 // — Comandos —
 
-fn cmdEjecutar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
+/// Topes de lectura del intérprete; por defecto los de limites.zig.
+const Topes = struct {
+    lectura: usize = limites.archivo_datos,
+    red: usize = limites.red_respuesta,
+
+    fn parse(args: []const [:0]const u8) !Topes {
+        var t = Topes{};
+        for (args) |arg| {
+            if (std.mem.startsWith(u8, arg, "--limite-lectura=")) {
+                t.lectura = try std.fmt.parseInt(usize, arg["--limite-lectura=".len..], 10);
+            } else if (std.mem.startsWith(u8, arg, "--limite-red=")) {
+                t.red = try std.fmt.parseInt(usize, arg["--limite-red=".len..], 10);
+            } else return error.OpcionesInvalidas;
+        }
+        return t;
+    }
+};
+
+fn cmdEjecutar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8, topes: Topes) !void {
     var prog = try modulos.construir(gpa, io, ruta);
     defer prog.deinit();
     try validarPrograma(gpa, ruta, &prog);
@@ -132,6 +156,8 @@ fn cmdEjecutar(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
     var interp = try interprete.Interprete.init(gpa);
     defer interp.deinit();
     interp.io = io; // habilita el módulo `sistema` (archivos)
+    interp.limite_archivo = topes.lectura;
+    interp.limite_red = topes.red;
     var salida_io = io;
     interp.destino_salida = .{ .contexto = &salida_io, .escribir = enviarSalida };
     interp.ejecutarModulos(&prog) catch |err| {
@@ -540,6 +566,8 @@ fn imprimirAyuda(io: std.Io) !void {
         \\Comandos disponibles:
         \\  nuevo    <nombre>         Crea un proyecto nuevo.
         \\  ejecutar <archivo.alma>   Compila al vuelo y ejecuta el programa.
+        \\    --limite-lectura=BYTES  Tope de sistema.leer_archivo (100 MB por defecto).
+        \\    --limite-red=BYTES      Tope del cuerpo de una respuesta de red (50 MB).
         \\  compilar <archivo.alma>   Compila a un binario nativo (subconjunto; requiere zig cc).
         \\    --backend=propio      Backend experimental Windows x64, sin compilador externo.
         \\  analizar <archivo.alma>   Revisa el código en busca de errores (linter).
