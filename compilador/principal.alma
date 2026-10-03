@@ -1,6 +1,0 @@
-importar doble desde "operaciones"
-importar FACTOR desde "operaciones"
-
-funcion principal()
-    imprimir(doble(21) + FACTOR)
-fin

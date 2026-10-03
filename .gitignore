@@ -11,3 +11,8 @@ compilador/zig-out/
 
 # Temporales de compilación
 .alma-tmp-*
+
+# Copias de trabajo de editores/herramientas
+*.bak
+*.new
+*.orig

@@ -1,4 +1,0 @@
-exportar funcion doble(n: entero) -> entero
-    retornar n * 2
-fin
-exportar fijo FACTOR = 10
