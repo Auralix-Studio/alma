@@ -1191,6 +1191,13 @@ pub const Interprete = struct {
     }
 
     fn formatearValor(self: *Interprete, out: *Buffer, v: Valor) ErrorEjec!void {
+        return self.formatearAnidado(out, v, 0);
+    }
+
+    /// El nivel acota la recursión: una lista que se contiene a sí misma (o un
+    /// anidamiento extremo) produce un error de Alma en vez de agotar el stack.
+    fn formatearAnidado(self: *Interprete, out: *Buffer, v: Valor, nivel: usize) ErrorEjec!void {
+        if (nivel > limites.anidamiento) return self.fallar("estructura demasiado anidada para mostrarse (¿contiene un ciclo?)", .{});
         switch (v) {
             .nulo => try out.appendSlice(self.allocator, "nulo"),
             .entero => |n| {
@@ -1211,7 +1218,7 @@ pub const Interprete = struct {
                 try out.append(self.allocator, '[');
                 for (lst.items, 0..) |item, i| {
                     if (i > 0) try out.appendSlice(self.allocator, ", ");
-                    try self.formatearValor(out, item);
+                    try self.formatearAnidado(out, item, nivel + 1);
                 }
                 try out.append(self.allocator, ']');
             },
@@ -1223,7 +1230,7 @@ pub const Interprete = struct {
                     try out.append(self.allocator, '"');
                     try out.appendSlice(self.allocator, k);
                     try out.appendSlice(self.allocator, "\": ");
-                    try self.formatearValor(out, d.get(k).?);
+                    try self.formatearAnidado(out, d.get(k).?, nivel + 1);
                 }
                 try out.append(self.allocator, '}');
             },
@@ -1234,7 +1241,7 @@ pub const Interprete = struct {
                     if (i > 0) try out.appendSlice(self.allocator, ", ");
                     try out.appendSlice(self.allocator, c.nombre);
                     try out.append(self.allocator, '=');
-                    try self.formatearValor(out, inst.campos.get(c.nombre) orelse Valor.nulo);
+                    try self.formatearAnidado(out, inst.campos.get(c.nombre) orelse Valor.nulo, nivel + 1);
                 }
                 try out.append(self.allocator, ')');
             },
@@ -1266,6 +1273,9 @@ pub const Interprete = struct {
 // — Funciones nativas (librería estándar embrionaria) —
 
 fn nativaImprimir(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
+    // Una línea que falla a mitad del formateo no deja fragmentos en la salida.
+    const inicio = interp.salida.items.len;
+    errdefer interp.salida.items.len = inicio;
     for (args, 0..) |arg, i| {
         if (i > 0) try interp.salida.append(interp.allocator, ' ');
         try interp.formatearValor(&interp.salida, arg);
@@ -1368,6 +1378,14 @@ fn decArg(interp: *Interprete, v: Valor, ctx: []const u8) ErrorEjec!f64 {
     return comoDecimal(v) orelse interp.fallar("{s} espera un número", .{ctx});
 }
 
+/// Conversión comprobada: NaN, infinitos y valores fuera de i64 son errores de Alma
+/// (un @intFromFloat fuera de rango aborta el proceso o es comportamiento indefinido).
+fn decimalAEntero(interp: *Interprete, d: f64, ctx: []const u8) ErrorEjec!i64 {
+    const limite: f64 = 9223372036854775808.0; // 2^63
+    if (!std.math.isFinite(d) or d >= limite or d < -limite) return interp.fallar("{s}: el resultado no cabe en un entero", .{ctx});
+    return @intFromFloat(d);
+}
+
 fn matRaiz(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len != 1) return interp.fallar("raiz espera 1 argumento", .{});
     return .{ .decimal = @sqrt(try decArg(interp, args[0], "raiz")) };
@@ -1379,22 +1397,22 @@ fn matPotencia(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
 fn matAbsoluto(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len != 1) return interp.fallar("absoluto espera 1 argumento", .{});
     return switch (args[0]) {
-        .entero => |n| .{ .entero = if (n < 0) -n else n },
+        .entero => |n| if (n == std.math.minInt(i64)) interp.fallar("desbordamiento de entero", .{}) else .{ .entero = if (n < 0) -n else n },
         .decimal => |d| .{ .decimal = @abs(d) },
         else => interp.fallar("absoluto espera un número", .{}),
     };
 }
 fn matPiso(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len != 1) return interp.fallar("piso espera 1 argumento", .{});
-    return .{ .entero = @intFromFloat(@floor(try decArg(interp, args[0], "piso"))) };
+    return .{ .entero = try decimalAEntero(interp, @floor(try decArg(interp, args[0], "piso")), "piso") };
 }
 fn matTecho(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len != 1) return interp.fallar("techo espera 1 argumento", .{});
-    return .{ .entero = @intFromFloat(@ceil(try decArg(interp, args[0], "techo"))) };
+    return .{ .entero = try decimalAEntero(interp, @ceil(try decArg(interp, args[0], "techo")), "techo") };
 }
 fn matRedondear(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len != 1) return interp.fallar("redondear espera 1 argumento", .{});
-    return .{ .entero = @intFromFloat(@round(try decArg(interp, args[0], "redondear"))) };
+    return .{ .entero = try decimalAEntero(interp, @round(try decArg(interp, args[0], "redondear")), "redondear") };
 }
 fn matMinimo(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len != 2) return interp.fallar("minimo espera 2 argumentos", .{});
@@ -1524,7 +1542,10 @@ fn sisExiste(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     return .{ .logico = true };
 }
 fn sisSalir(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
-    const codigo: u8 = if (args.len >= 1) @intCast(try enteroArg(interp, args[0])) else 0;
+    if (args.len > 1) return interp.fallar("salir espera () o (codigo)", .{});
+    const valor: i64 = if (args.len == 1) try enteroArg(interp, args[0]) else 0;
+    if (valor < 0 or valor > 255) return interp.fallar("salir: el código debe estar entre 0 y 255, recibió {d}", .{valor});
+    const codigo: u8 = @intCast(valor);
     if (interp.io) |io| std.Io.File.stdout().writeStreamingAll(io, interp.salida.items) catch {};
     std.process.exit(codigo);
 }
@@ -1694,7 +1715,8 @@ fn jsonEscribirCadena(interp: *Interprete, out: *Buffer, s: []const u8) ErrorEje
     try out.append(interp.allocator, '"');
 }
 
-fn jsonEscribir(interp: *Interprete, out: *Buffer, v: Valor) ErrorEjec!void {
+fn jsonEscribir(interp: *Interprete, out: *Buffer, v: Valor, nivel: usize) ErrorEjec!void {
+    if (nivel > limites.anidamiento) return interp.fallar("estructura demasiado anidada para serializar (¿contiene un ciclo?)", .{});
     switch (v) {
         .nulo => try out.appendSlice(interp.allocator, "null"),
         .entero, .decimal => try interp.formatearValor(out, v),
@@ -1704,7 +1726,7 @@ fn jsonEscribir(interp: *Interprete, out: *Buffer, v: Valor) ErrorEjec!void {
             try out.append(interp.allocator, '[');
             for (lst.items, 0..) |item, k| {
                 if (k > 0) try out.append(interp.allocator, ',');
-                try jsonEscribir(interp, out, item);
+                try jsonEscribir(interp, out, item, nivel + 1);
             }
             try out.append(interp.allocator, ']');
         },
@@ -1715,7 +1737,7 @@ fn jsonEscribir(interp: *Interprete, out: *Buffer, v: Valor) ErrorEjec!void {
                 if (idx > 0) try out.append(interp.allocator, ',');
                 try jsonEscribirCadena(interp, out, k);
                 try out.append(interp.allocator, ':');
-                try jsonEscribir(interp, out, d.get(k).?);
+                try jsonEscribir(interp, out, d.get(k).?, nivel + 1);
             }
             try out.append(interp.allocator, '}');
         },
@@ -1727,7 +1749,7 @@ fn jsonSerializar(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len != 1) return interp.fallar("serializar espera 1 argumento", .{});
     var out: Buffer = .empty;
     defer out.deinit(interp.allocator);
-    try jsonEscribir(interp, &out, args[0]);
+    try jsonEscribir(interp, &out, args[0], 0);
     return .{ .texto = try interp.copiarTexto(out.items) };
 }
 
@@ -1808,9 +1830,8 @@ fn redCodificarUrl(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
         switch (c) {
             'A'...'Z', 'a'...'z', '0'...'9', '-', '_', '.', '~' => try out.append(interp.allocator, c),
             else => {
-                var hex: [3]u8 = undefined;
-                _ = std.fmt.bufPrint(&hex, "%{X:0>2}", .{c}) catch unreachable;
-                try out.appendSlice(interp.allocator, &hex);
+                const hex = "0123456789ABCDEF";
+                try out.appendSlice(interp.allocator, &[_]u8{ '%', hex[c >> 4], hex[c & 0xf] });
             },
         }
     }
@@ -1995,6 +2016,44 @@ test "negacion del entero minimo se puede capturar" {
         \\    imprimir(e.mensaje)
         \\fin
     , "desbordamiento de entero\n");
+}
+
+test "nativas: conversiones fuera de rango y ciclos son errores capturables" {
+    try esperarSalida(
+        \\importar matematicas
+        \\importar sistema
+        \\intentar
+        \\    matematicas.piso(1e300)
+        \\capturar (e)
+        \\    imprimir(e.mensaje)
+        \\fin
+        \\intentar
+        \\    matematicas.redondear(matematicas.raiz(-1.0))
+        \\capturar (e)
+        \\    imprimir(e.mensaje)
+        \\fin
+        \\intentar
+        \\    matematicas.absoluto(-9223372036854775807 - 1)
+        \\capturar (e)
+        \\    imprimir(e.mensaje)
+        \\fin
+        \\intentar
+        \\    sistema.salir(256)
+        \\capturar (e)
+        \\    imprimir(e.mensaje)
+        \\fin
+        \\l = [1]
+        \\agregar(l, l)
+        \\intentar
+        \\    imprimir("antes", l)
+        \\capturar (e)
+        \\    imprimir(e.mensaje)
+        \\fin
+    , "piso: el resultado no cabe en un entero\n" ++
+        "redondear: el resultado no cabe en un entero\n" ++
+        "desbordamiento de entero\n" ++
+        "salir: el código debe estar entre 0 y 255, recibió 256\n" ++
+        "estructura demasiado anidada para mostrarse (¿contiene un ciclo?)\n");
 }
 
 test "aritmética con precedencia" {
