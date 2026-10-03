@@ -25,7 +25,10 @@ pub const Instr = struct {
         retornar: Reg,
     },
 };
-pub const Funcion = struct { nombre: []const u8, parametros: usize, registros: usize, instrucciones: []const Instr };
+/// `variables[r]` indica si el registro r nombra una variable o parámetro (vive toda
+/// la función); los demás son temporales de una sentencia y un backend puede
+/// compartir su almacenamiento cuando sus vidas no se solapan.
+pub const Funcion = struct { nombre: []const u8, parametros: usize, registros: usize, variables: []const bool, instrucciones: []const Instr };
 pub const Programa = struct {
     arena: std.heap.ArenaAllocator,
     funciones: []const Funcion = &.{},
@@ -44,6 +47,7 @@ const Constructor = struct {
     archivos: std.StringHashMapUnmanaged([]const u8) = .{},
     aridades: std.ArrayListUnmanaged(usize) = .empty,
     variables: std.StringHashMapUnmanaged(Reg) = .{},
+    es_variable: std.ArrayListUnmanaged(bool) = .empty,
     instrucciones: std.ArrayListUnmanaged(Instr) = .empty,
     bucles: std.ArrayListUnmanaged(Bucle) = .empty,
     registros: usize = 0,
@@ -67,8 +71,9 @@ const Constructor = struct {
         }
         try self.instrucciones.append(self.a, .{ .pos = pos, .dato = dato });
     }
-    fn reg(self: *Constructor) Reg {
+    fn reg(self: *Constructor) Error!Reg {
         const r = self.registros;
+        try self.es_variable.append(self.a, false);
         self.registros += 1;
         return r;
     }
@@ -82,12 +87,13 @@ const Constructor = struct {
     }
     fn variable(self: *Constructor, nombre: []const u8) Error!Reg {
         if (self.variables.get(nombre)) |r| return r;
-        const r = self.reg();
+        const r = try self.reg();
+        self.es_variable.items[r] = true;
         try self.variables.put(self.a, try self.a.dupe(u8, nombre), r);
         return r;
     }
     fn literal(self: *Constructor, valor: Literal) Error!Reg {
-        const r = self.reg();
+        const r = try self.reg();
         try self.emitir(.{ .literal = .{ .dst = r, .valor = valor } });
         return r;
     }
@@ -103,7 +109,7 @@ const Constructor = struct {
             .literal_nulo => return self.literal(.nulo),
             .identificador => |n| {
                 const origen = self.variables.get(n) orelse return self.fallo("variable no disponible en el subconjunto nativo");
-                const dst = self.reg();
+                const dst = try self.reg();
                 try self.emitir(.{ .copiar = .{ .dst = dst, .src = origen } });
                 return dst;
             },
@@ -115,14 +121,14 @@ const Constructor = struct {
                     else => return self.fallo("operador unario no soportado"),
                 };
                 const src = try self.expr(u.operando);
-                const dst = self.reg();
+                const dst = try self.reg();
                 try self.emitir(.{ .unaria = .{ .dst = dst, .src = src, .op = op } });
                 try self.liberar(src);
                 return dst;
             },
             .binaria => |b| {
                 const izq = try self.expr(b.izq);
-                const dst = self.reg();
+                const dst = try self.reg();
                 if (b.op == .y_logico or b.op == .o_logico) {
                     const fin = self.etiqueta();
                     try self.emitir(.{ .unaria = .{ .dst = dst, .src = izq, .op = .logico } });
@@ -167,7 +173,7 @@ const Constructor = struct {
                 } else return self.fallo("función no soportada por el backend nativo");
                 const args = try self.a.alloc(Reg, l.args.len);
                 for (l.args, 0..) |arg, i| args[i] = try self.expr(arg);
-                const dst = self.reg();
+                const dst = try self.reg();
                 try self.emitir(.{ .llamar = .{ .dst = dst, .destino = destino, .args = args } });
                 for (args) |r| try self.liberar(r);
                 return dst;
@@ -255,6 +261,7 @@ const Constructor = struct {
     fn compilarFuncion(self: *Constructor, s: ast.Stmt, nombre: []const u8) Error!Funcion {
         const f = s.dato.funcion;
         self.variables = .{};
+        self.es_variable = .empty;
         self.instrucciones = .empty;
         self.registros = 0;
         self.etiquetas = 0;
@@ -265,7 +272,13 @@ const Constructor = struct {
         }
         try self.bloque(f.cuerpo);
         try self.emitir(.{ .retornar = try self.literal(.nulo) });
-        return .{ .nombre = try self.a.dupe(u8, nombre), .parametros = f.params.len, .registros = self.registros, .instrucciones = try self.instrucciones.toOwnedSlice(self.a) };
+        return .{
+            .nombre = try self.a.dupe(u8, nombre),
+            .parametros = f.params.len,
+            .registros = self.registros,
+            .variables = try self.es_variable.toOwnedSlice(self.a),
+            .instrucciones = try self.instrucciones.toOwnedSlice(self.a),
+        };
     }
 
     fn construirModulos(self: *Constructor, prog: *const modulos.Programa) Error!void {
