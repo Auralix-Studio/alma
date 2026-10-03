@@ -403,10 +403,10 @@ test "IR libera recursos ante fallos de asignacion" {
 
 test "IR decodifica escapes igual que el interprete, incluido NUL" {
     var p = try programaPrueba(std.testing.allocator,
-        \funcion principal()
-        \    imprimir("a\0b\t\\")
-        \    imprimir(-9223372036854775808)
-        \fin
+        \\funcion principal()
+        \\    imprimir("a\0b\t\\")
+        \\    imprimir(-9223372036854775808)
+        \\fin
     );
     defer p.deinit();
     try std.testing.expect(p.diag == null);

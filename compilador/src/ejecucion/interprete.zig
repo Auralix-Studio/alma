@@ -217,6 +217,9 @@ pub const Interprete = struct {
 
     allocator: std.mem.Allocator,
     memoria_gc: *MemoriaGc,
+    /// Estructuras internas del GC (índice de objetos, raíces, pila de marcado). Se
+    /// reservan fuera del conteo: crecen con la basura y no deben inflar el umbral.
+    meta: std.mem.Allocator,
     arena: std.heap.ArenaAllocator,
     global: *Entorno,
     entornos_funciones: std.AutoHashMapUnmanaged(*const Stmt.Funcion, *Entorno) = .empty,
@@ -251,7 +254,7 @@ pub const Interprete = struct {
     pub fn init(child: std.mem.Allocator) !Interprete {
         const memoria = try child.create(MemoriaGc);
         memoria.* = .{ .padre = child };
-        var self = Interprete{ .allocator = memoria.allocator(), .memoria_gc = memoria, .arena = std.heap.ArenaAllocator.init(child), .global = undefined };
+        var self = Interprete{ .allocator = memoria.allocator(), .memoria_gc = memoria, .meta = child, .arena = std.heap.ArenaAllocator.init(child), .global = undefined };
         errdefer self.deinit();
         self.global = try self.nuevoEntorno(null);
         try self.global.definir(self.allocator, "imprimir", .{ .nativa = &nativaImprimir });
@@ -271,12 +274,12 @@ pub const Interprete = struct {
         while (it.next()) |entry| {
             self.liberarObjeto(entry.value_ptr.datos);
         }
-        self.gc_objetos.deinit(self.allocator);
+        self.gc_objetos.deinit(self.meta);
         self.entornos_funciones.deinit(self.allocator);
         self.salida.deinit(self.allocator);
-        self.raices_temporales.deinit(self.allocator);
+        self.raices_temporales.deinit(self.meta);
         self.raices_modulos.deinit(self.allocator);
-        self.pila_marcado.deinit(self.allocator);
+        self.pila_marcado.deinit(self.meta);
         self.arena.deinit();
         self.memoria_gc.padre.destroy(self.memoria_gc);
     }
@@ -302,8 +305,8 @@ pub const Interprete = struct {
             .modulo => |m| @intFromPtr(m),
             .entorno => |e| @intFromPtr(e),
         };
-        try self.raices_temporales.ensureUnusedCapacity(self.allocator, 1);
-        try self.gc_objetos.put(self.allocator, ptr, .{ .marcado = false, .datos = datos });
+        try self.raices_temporales.ensureUnusedCapacity(self.meta, 1);
+        try self.gc_objetos.put(self.meta, ptr, .{ .marcado = false, .datos = datos });
         self.raices_temporales.appendAssumeCapacity(ptr);
         self.bytes_reservados = self.memoria_gc.bytes;
         self.gc_pendiente = self.gc_pendiente or self.bytes_reservados -| self.gc_base >= self.limiteGc();
@@ -324,7 +327,7 @@ pub const Interprete = struct {
 
     fn recolectar(self: *Interprete) ErrorEjec!void {
         // Reservar ANTES de modificar marcas. Un fallo conserva el heap íntegro.
-        try self.pila_marcado.ensureTotalCapacity(self.allocator, self.gc_objetos.count());
+        try self.pila_marcado.ensureTotalCapacity(self.meta, self.gc_objetos.count());
         self.pila_marcado.clearRetainingCapacity();
         self.marcarRaices();
         while (self.pila_marcado.pop()) |ptr| {
@@ -382,7 +385,7 @@ pub const Interprete = struct {
     }
 
     fn proteger(self: *Interprete, valor: Valor) ErrorEjec!void {
-        if (punteroValor(valor)) |ptr| try self.raices_temporales.append(self.allocator, ptr);
+        if (punteroValor(valor)) |ptr| try self.raices_temporales.append(self.meta, ptr);
     }
 
     fn marcarValor(self: *Interprete, v: Valor) void {
@@ -651,7 +654,7 @@ pub const Interprete = struct {
     fn ejecStmt(self: *Interprete, s: *Stmt, env: *Entorno) ErrorEjec!Flujo {
         const marca = self.raices_temporales.items.len;
         defer self.raices_temporales.items.len = marca;
-        try self.raices_temporales.append(self.allocator, @intFromPtr(env));
+        try self.raices_temporales.append(self.meta, @intFromPtr(env));
         try self.puntoSeguro();
         self.stmt_pos = s.pos;
         switch (s.dato) {
@@ -855,7 +858,7 @@ pub const Interprete = struct {
             else => return self.fallar("'para' requiere una lista o diccionario (usa rango(n) para números)", .{}),
         };
         defer self.allocator.free(items);
-        try self.raices_temporales.ensureUnusedCapacity(self.allocator, items.len);
+        try self.raices_temporales.ensureUnusedCapacity(self.meta, items.len);
         for (items) |v| if (punteroValor(v)) |ptr| self.raices_temporales.appendAssumeCapacity(ptr);
         var i: usize = 0;
         while (i < items.len) : (i += 1) {

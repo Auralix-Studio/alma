@@ -150,8 +150,12 @@ fn esperarFormato(d: f64, esperado: []const u8) !void {
 }
 
 test "formato decimal canonico de la propuesta numerica" {
-    const tres: f64 = 3.0;
-    try esperarFormato(0.1 + 0.2, "0.30000000000000004");
+    // Valores en tiempo de ejecución: en comptime 0.1 + 0.2 se calcula con
+    // precisión exacta y daría 0.3.
+    var tres: f64 = 3.0;
+    var un_decimo: f64 = 0.1;
+    _ = .{ &tres, &un_decimo };
+    try esperarFormato(un_decimo + 0.2, "0.30000000000000004");
     try esperarFormato(10000000.0, "10000000");
     try esperarFormato(1.0 / tres, "0.3333333333333333");
     try esperarFormato(-0.0, "-0");
