@@ -412,6 +412,20 @@ fn cmdNuevo(io: std.Io, gpa: std.mem.Allocator, nombre: []const u8) !void {
     const ruta_readme = try std.fmt.allocPrint(gpa, "{s}/README.md", .{nombre});
     defer gpa.free(ruta_readme);
 
+    // `nuevo` sobre una carpeta existente no reemplaza archivos del usuario: se
+    // comprueba todo antes de escribir para no dejar un proyecto a medias.
+    for ([_][]const u8{ "principal.alma", "README.md", "alma.paquete" }) |archivo| {
+        const ruta = try std.fmt.allocPrint(gpa, "{s}/{s}", .{ nombre, archivo });
+        defer gpa.free(ruta);
+        if (cwd.statFile(io, ruta, .{ .follow_symlinks = false })) |_| {
+            std.debug.print("'{s}' ya existe; 'alma nuevo' no sobrescribe archivos.\n", .{ruta});
+            return error.ProyectoExistente;
+        } else |err| switch (err) {
+            error.FileNotFound => {},
+            else => return err,
+        }
+    }
+
     const codigo_principal =
         \\// Programa principal del proyecto.
         \\importar sistema

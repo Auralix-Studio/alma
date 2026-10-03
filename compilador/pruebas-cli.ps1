@@ -267,4 +267,15 @@ ProbarErrorRuntime 'variable-no-inicializada' "    si falso`n        a = 1`n    
 # } finally {
 #     $env:PATH = $rutaAnterior
 # }
+Push-Location $casos
+try {
+    $r = Invocar @('nuevo', 'proyecto-nuevo')
+    Comprobar ($r.Codigo -eq 0 -and (Test-Path 'proyecto-nuevo/principal.alma')) "alma nuevo falló: $($r.Texto)"
+    $principalNuevo = Join-Path $casos 'proyecto-nuevo/principal.alma'
+    [IO.File]::WriteAllText($principalNuevo, 'contenido del usuario', [Text.UTF8Encoding]::new($false))
+    $r = Invocar @('nuevo', 'proyecto-nuevo')
+    Comprobar ($r.Codigo -ne 0 -and $r.Texto.Contains('no sobrescribe')) "alma nuevo sobre un proyecto existente: $($r.Texto)"
+    Comprobar ([IO.File]::ReadAllText($principalNuevo) -eq 'contenido del usuario') 'alma nuevo reemplazó principal.alma'
+} finally { Pop-Location }
+
 Write-Output "$script:comprobaciones comprobaciones CLI correctas."
