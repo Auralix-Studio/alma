@@ -4,10 +4,10 @@ Fecha: 2026-10-03. Límites y conteo aprobados explícitamente por el usuario en
 esta fecha. La implementación y su verificación se registran por separado.
 
 La solicitud exige rechazar el exceso de profundidad con errores de Alma.
-Las especificaciones 02 y 05 no fijan valores ni cómo contarlos. Se propone
-el siguiente contrato para aprobar antes de modificar el compilador.
+Las especificaciones 02 y 05 no fijaban valores ni cómo contarlos. El usuario
+aprobó el siguiente contrato antes de modificar el compilador.
 
-| Recurso | Máximo propuesto | Qué se cuenta | Error |
+| Recurso | Máximo aprobado | Qué se cuenta | Error |
 |---|---:|---|---|
 | Sintaxis | 64 | Niveles activos combinados de bloques y expresiones anidadas; además, altura del AST de expresiones | `límite de profundidad sintáctica excedido`, con archivo:línea:columna |
 | Llamadas Alma | 64 | Funciones y métodos activos, incluida `principal`; llamadas nativas incorporadas excluidas | `desbordamiento de pila` |
@@ -27,16 +27,16 @@ para el primer cuerpo indentado; el nivel superior no consume un bloque.
 
 El intérprete entrega el error de llamadas mediante su mecanismo existente de
 `intentar`/`capturar`. El runtime C termina con código 1 y diagnóstico de origen,
-porque actualmente no compila `intentar`. Ambos usan el mismo máximo. La entrada
-sintética de la IR no cuenta como función del usuario. El backend propio conserva
+porque actualmente no compila `intentar`. Ambos usan el mismo máximo. El `main`
+del envoltorio C no cuenta como función Alma; `principal` sí. El backend propio conserva
 su limitación actual hasta las tareas posteriores: no se declara ya protegido.
 
-Los valores son conservadores y están pendientes de validación en Debug y Release
-en Windows y Linux. Un contador limita niveles lógicos, no bytes de stack: marcos
+Los casos de aceptación se verificaron en Windows Debug y ReleaseSafe; Linux
+queda pendiente. Un contador limita niveles lógicos, no bytes de stack: marcos
 C enormes y combinaciones de expresiones profundas con llamadas aún requieren
 medición. No se promete inmunidad ante cualquier agotamiento de stack.
 
-## Implementación y aceptación propuestas
+## Implementación y aceptación
 
 1. Constantes compartidas por parser, intérprete y emisor C; emitir el máximo en
    el C generado para evitar duplicar números independientes en el runtime.
@@ -51,8 +51,8 @@ medición. No se promete inmunidad ante cualquier agotamiento de stack.
 5. JSON: fronteras de objetos/arreglos mezclados y análisis normal después de
    capturar el error. Parser: comprobar archivo:línea:columna en el CLI.
 
-Cada corrección se entregará por separado, mostrando la prueba fallida antes del
-cambio y pasada después, junto con `zig build test`.
+Las cuatro correcciones se entregaron por separado, con regresiones fallidas
+antes y pasadas después. Véase [el informe de verificación](INFORME-ENDURECIMIENTO.md).
 
 ## Decisión recibida
 
