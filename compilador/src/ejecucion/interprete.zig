@@ -3,11 +3,15 @@
 //! Recorre el AST (ast.zig) y ejecuta el programa. Base de `alma ejecutar`.
 //! La salida de `imprimir` se acumula en un buffer (`salida`) para poder testearla.
 //!
-//! Soportado en v0.1: variables, aritmética (entero/decimal), texto (+ concatena),
-//! lógicos con cortocircuito, comparaciones, `si/sino si/sino`, `mientras`,
-//! funciones (definición, llamada, recursión, `retornar`), y el punto de entrada
-//! `principal()`. Diferido: `estructura`/`modelo` en runtime, `para` (iterables),
-//! acceso a miembros, async/hilo.
+//! Cubre el lenguaje v0.1 completo: escalares, textos, listas, diccionarios,
+//! `estructura`/`modelo` con métodos, errores (`intentar`/`lanzar`), módulos y la
+//! librería estándar. `asincrona`/`esperar`/`hilo` se ejecutan de forma síncrona.
+//!
+//! Memoria: los valores dinámicos viven en un heap con marcado y barrido no móvil
+//! (docs/PROPUESTA-MEMORIA.md, opción b). Solo se recolecta en `puntoSeguro`
+//! (inicio de sentencia y cabeza de bucle); todo objeto creado o leído durante la
+//! sentencia en curso queda registrado en `raices_temporales` hasta que termina.
+//! La arena solo guarda metadatos inmutables del programa (`TipoDef`).
 
 const std = @import("std");
 const lexer = @import("../lexico/lexer.zig");
@@ -16,6 +20,7 @@ const ast = @import("../sintaxis/ast.zig");
 const tk = @import("../lexico/token.zig");
 const limites = @import("../limites.zig");
 const modulos = @import("../modulos.zig");
+const MemoriaGc = @import("memoria_gc.zig").Memoria;
 
 const Expr = ast.Expr;
 const Stmt = ast.Stmt;
@@ -175,7 +180,7 @@ pub const Interprete = struct {
         escribir: *const fn (*anyopaque, []const u8) anyerror!void,
     };
 
-        pub const GcObjeto = struct {
+    pub const GcObjeto = struct {
         pub const Datos = union(enum) {
             texto: []const u8,
             lista: *Lista,
@@ -192,12 +197,19 @@ pub const Interprete = struct {
     };
 
     allocator: std.mem.Allocator,
+    memoria_gc: *MemoriaGc,
     arena: std.heap.ArenaAllocator,
     global: *Entorno,
     entornos_funciones: std.AutoHashMapUnmanaged(*const Stmt.Funcion, *Entorno) = .empty,
     gc_objetos: std.AutoHashMapUnmanaged(usize, GcObjeto) = .empty,
     bytes_reservados: usize = 0,
     gc_umbral: usize = 1024 * 1024,
+    gc_pendiente: bool = false,
+    gc_base: usize = 0,
+    gc_recolecciones: usize = 0,
+    raices_temporales: std.ArrayListUnmanaged(usize) = .empty,
+    raices_modulos: std.ArrayListUnmanaged(*Entorno) = .empty,
+    pila_marcado: std.ArrayListUnmanaged(usize) = .empty,
     salida: Buffer = .empty,
     /// null captura la salida para pruebas; un destino la recibe al imprimir.
     destino_salida: ?DestinoSalida = null,
@@ -215,7 +227,10 @@ pub const Interprete = struct {
     prng: ?std.Random.DefaultPrng = null,
 
     pub fn init(child: std.mem.Allocator) !Interprete {
-        var self = Interprete{ .allocator = child, .arena = std.heap.ArenaAllocator.init(child), .global = undefined };
+        const memoria = try child.create(MemoriaGc);
+        memoria.* = .{ .padre = child };
+        var self = Interprete{ .allocator = memoria.allocator(), .memoria_gc = memoria, .arena = std.heap.ArenaAllocator.init(child), .global = undefined };
+        errdefer self.deinit();
         self.global = try self.nuevoEntorno(null);
         try self.global.definir(self.allocator, "imprimir", .{ .nativa = &nativaImprimir });
         try self.global.definir(self.allocator, "rango", .{ .nativa = &nativaRango });
@@ -225,6 +240,7 @@ pub const Interprete = struct {
         try self.global.definir(self.allocator, "claves", .{ .nativa = &nativaClaves });
         try self.global.definir(self.allocator, "tiene", .{ .nativa = &nativaTiene });
         try self.global.definir(self.allocator, "error", .{ .nativa = &nativaError });
+        self.raices_temporales.clearRetainingCapacity();
         return self;
     }
 
@@ -236,7 +252,11 @@ pub const Interprete = struct {
         self.gc_objetos.deinit(self.allocator);
         self.entornos_funciones.deinit(self.allocator);
         self.salida.deinit(self.allocator);
+        self.raices_temporales.deinit(self.allocator);
+        self.raices_modulos.deinit(self.allocator);
+        self.pila_marcado.deinit(self.allocator);
         self.arena.deinit();
+        self.memoria_gc.padre.destroy(self.memoria_gc);
     }
 
     pub fn textoSalida(self: *Interprete) []const u8 {
@@ -245,6 +265,10 @@ pub const Interprete = struct {
 
 
     fn registrarGc(self: *Interprete, datos: GcObjeto.Datos) !void {
+        // Consume la reserva también si falla el registro. Nunca recolecta aquí:
+        // aún puede haber objetos parcialmente construidos y temporales Zig.
+        errdefer self.liberarObjeto(datos);
+        if (datos == .texto and datos.texto.len == 0) return;
         const ptr = switch (datos) {
             .texto => |s| @intFromPtr(s.ptr),
             .lista => |l| @intFromPtr(l),
@@ -256,99 +280,126 @@ pub const Interprete = struct {
             .modulo => |m| @intFromPtr(m),
             .entorno => |e| @intFromPtr(e),
         };
+        try self.raices_temporales.ensureUnusedCapacity(self.allocator, 1);
         try self.gc_objetos.put(self.allocator, ptr, .{ .marcado = false, .datos = datos });
-        self.bytes_reservados += 64;
-        if (self.bytes_reservados > self.gc_umbral) {
-            self.recolectar();
-        }
+        self.raices_temporales.appendAssumeCapacity(ptr);
+        self.bytes_reservados = self.memoria_gc.bytes;
+        self.gc_pendiente = self.gc_pendiente or self.bytes_reservados -| self.gc_base >= self.limiteGc();
     }
 
-    fn recolectar(self: *Interprete) void {
+    /// Bytes nuevos tolerados antes de recolectar: el umbral mínimo o el heap vivo
+    /// tras la última recolección (crecimiento geométrico, coste amortizado lineal).
+    fn limiteGc(self: *const Interprete) usize {
+        return @max(self.gc_umbral, self.gc_base);
+    }
+
+    /// Único lugar donde se recolecta: inicio de sentencia y cabeza de bucle. Ahí
+    /// todo valor vivo en el stack de Zig está en `raices_temporales` o en un entorno.
+    fn puntoSeguro(self: *Interprete) ErrorEjec!void {
+        self.bytes_reservados = self.memoria_gc.bytes;
+        if (self.gc_pendiente or self.bytes_reservados -| self.gc_base >= self.limiteGc()) try self.recolectar();
+    }
+
+    fn recolectar(self: *Interprete) ErrorEjec!void {
+        // Reservar ANTES de modificar marcas. Un fallo conserva el heap íntegro.
+        try self.pila_marcado.ensureTotalCapacity(self.allocator, self.gc_objetos.count());
+        self.pila_marcado.clearRetainingCapacity();
         self.marcarRaices();
+        while (self.pila_marcado.pop()) |ptr| {
+            const datos = self.gc_objetos.get(ptr).?.datos;
+            switch (datos) {
+                .lista => |l| for (l.items) |v| self.marcarValor(v),
+                .diccionario => |d| {
+                    for (d.keys(), d.values()) |k, v| {
+                        self.marcarValor(.{ .texto = k });
+                        self.marcarValor(v);
+                    }
+                },
+                .instancia => |i| self.marcarMapa(i.campos),
+                .metodo => |m| self.marcarPtr(@intFromPtr(m.instancia)),
+                .falla => |f| self.marcarValor(.{ .texto = f.mensaje }),
+                .modulo => |m| self.marcarMapa(m.miembros),
+                .entorno => |e| {
+                    if (e.padre) |p| self.marcarPtr(@intFromPtr(p));
+                    if (e.self_inst) |i| self.marcarPtr(@intFromPtr(i));
+                    self.marcarMapa(e.mapa);
+                },
+                .promesa => |p| self.marcarValor(p.valor),
+                .texto => {},
+            }
+        }
         self.barrer();
-        self.bytes_reservados = 0;
+        self.bytes_reservados = self.memoria_gc.bytes;
+        self.gc_base = self.bytes_reservados;
+        self.gc_pendiente = false;
+        self.gc_recolecciones += 1;
     }
 
     fn marcarRaices(self: *Interprete) void {
-        self.marcarEntorno(self.global);
+        self.marcarPtr(@intFromPtr(self.global));
         var it = self.entornos_funciones.iterator();
-        while (it.next()) |entry| self.marcarEntorno(entry.value_ptr.*);
+        while (it.next()) |entry| self.marcarPtr(@intFromPtr(entry.value_ptr.*));
+        for (self.raices_modulos.items) |env| self.marcarPtr(@intFromPtr(env));
+        for (self.raices_temporales.items) |ptr| self.marcarPtr(ptr);
         if (self.error_valor) |ev| self.marcarValor(ev);
+        if (self.diag) |d| self.marcarValor(.{ .texto = d });
+    }
+
+    fn punteroValor(v: Valor) ?usize {
+        return switch (v) {
+            .texto => |s| if (s.len == 0) null else @intFromPtr(s.ptr),
+            .lista => |p| @intFromPtr(p),
+            .diccionario => |p| @intFromPtr(p),
+            .instancia => |p| @intFromPtr(p),
+            .metodo => |p| @intFromPtr(p),
+            .falla => |p| @intFromPtr(p),
+            .promesa => |p| @intFromPtr(p),
+            .modulo => |p| @intFromPtr(p),
+            else => null,
+        };
+    }
+
+    fn proteger(self: *Interprete, valor: Valor) ErrorEjec!void {
+        if (punteroValor(valor)) |ptr| try self.raices_temporales.append(self.allocator, ptr);
     }
 
     fn marcarValor(self: *Interprete, v: Valor) void {
-        switch (v) {
-            .texto => |s| self.marcarPtr(@intFromPtr(s.ptr)),
-            .lista => |l| self.marcarPtr(@intFromPtr(l)),
-            .diccionario => |d| self.marcarPtr(@intFromPtr(d)),
-            .instancia => |i| self.marcarPtr(@intFromPtr(i)),
-            .metodo => |m| self.marcarPtr(@intFromPtr(m)),
-            .falla => |f| self.marcarPtr(@intFromPtr(f)),
-            .promesa => |p| self.marcarPtr(@intFromPtr(p)),
-            .modulo => |m| self.marcarPtr(@intFromPtr(m)),
-            else => {},
-        }
+        if (punteroValor(v)) |ptr| self.marcarPtr(ptr);
     }
 
     fn marcarPtr(self: *Interprete, ptr: usize) void {
         if (self.gc_objetos.getPtr(ptr)) |obj| {
             if (obj.marcado) return;
             obj.marcado = true;
-            switch (obj.datos) {
-                .lista => |l| for (l.items) |v| self.marcarValor(v),
-                .diccionario => |d| {
-                    var dit = d.iterator();
-                    while (dit.next()) |entry| {
-                        self.marcarPtr(@intFromPtr(entry.key_ptr.*.ptr));
-                        self.marcarValor(entry.value_ptr.*);
-                    }
-                },
-                .instancia => |i| {
-                    var cit = i.campos.iterator();
-                    while (cit.next()) |entry| {
-                        self.marcarPtr(@intFromPtr(entry.key_ptr.*.ptr));
-                        self.marcarValor(entry.value_ptr.*);
-                    }
-                },
-                .metodo => |m| self.marcarPtr(@intFromPtr(m.instancia)),
-                .modulo => |m| {
-                    var mit = m.miembros.iterator();
-                    while (mit.next()) |entry| {
-                        self.marcarPtr(@intFromPtr(entry.key_ptr.*.ptr));
-                        self.marcarValor(entry.value_ptr.*);
-                    }
-                },
-                .entorno => |e| self.marcarEntorno(e),
-                .promesa => |p| self.marcarValor(p.valor),
-                else => {},
-            }
+            self.pila_marcado.appendAssumeCapacity(ptr);
         }
     }
 
-    fn marcarEntorno(self: *Interprete, e: *Entorno) void {
-        self.marcarPtr(@intFromPtr(e));
-        if (e.padre) |p| self.marcarEntorno(p);
-        if (e.self_inst) |i| self.marcarPtr(@intFromPtr(i));
-        var it = e.mapa.iterator();
+    fn marcarMapa(self: *Interprete, mapa: std.StringHashMapUnmanaged(Valor)) void {
+        var it = mapa.iterator();
         while (it.next()) |entry| {
-            self.marcarPtr(@intFromPtr(entry.key_ptr.*.ptr));
+            self.marcarValor(.{ .texto = entry.key_ptr.* });
             self.marcarValor(entry.value_ptr.*);
         }
     }
 
+    /// No reserva memoria: no puede fallar a mitad del barrido.
     fn barrer(self: *Interprete) void {
-        var nuevos = std.AutoHashMapUnmanaged(usize, GcObjeto){};
+        var liberados: usize = 0;
         var it = self.gc_objetos.iterator();
         while (it.next()) |entry| {
             if (!entry.value_ptr.marcado) {
                 self.liberarObjeto(entry.value_ptr.datos);
+                self.gc_objetos.removeByPtr(entry.key_ptr);
+                liberados += 1;
             } else {
                 entry.value_ptr.marcado = false;
-                nuevos.put(self.allocator, entry.key_ptr.*, entry.value_ptr.*) catch {};
             }
         }
-        self.gc_objetos.deinit(self.allocator);
-        self.gc_objetos = nuevos;
+        // Las bajas dejan lápidas; sin rehash las búsquedas se degradan en
+        // programas que crean y descartan objetos durante mucho tiempo.
+        if (liberados > 0 and self.gc_objetos.capacity() > 0)
+            self.gc_objetos.rehash(std.hash_map.AutoContext(usize){});
     }
 
     fn liberarObjeto(self: *Interprete, datos: GcObjeto.Datos) void {
@@ -398,7 +449,11 @@ pub const Interprete = struct {
     }
 
     fn fallar(self: *Interprete, comptime fmt: []const u8, args: anytype) ErrorEjec {
-        self.diag = std.fmt.allocPrint(self.a(), fmt, args) catch "error de ejecución (sin memoria)";
+        self.diag = blk: {
+            const mensaje = std.fmt.allocPrint(self.allocator, fmt, args) catch break :blk "error de ejecución (sin memoria)";
+            self.registrarGc(.{ .texto = mensaje }) catch break :blk "error de ejecución (sin memoria)";
+            break :blk mensaje;
+        };
         self.diag_pos = self.stmt_pos;
         self.error_valor = null; // error interno: se representa por su mensaje
         return error.ErrorEjecucion;
@@ -497,10 +552,14 @@ pub const Interprete = struct {
     // — Ejecución —
 
     pub fn ejecutarModulos(self: *Interprete, programa: *const modulos.Programa) ErrorEjec!void {
+        const marca = self.raices_temporales.items.len;
+        defer self.raices_temporales.items.len = marca;
         const nativas = self.global;
         var entornos: std.AutoHashMapUnmanaged(*const modulos.Unidad, *Entorno) = .empty;
+        defer entornos.deinit(self.allocator);
         for (programa.unidades) |unidad| {
             const env = try self.nuevoEntorno(nativas);
+            try self.raices_modulos.append(self.allocator, env);
             try entornos.put(self.allocator, unidad, env);
             self.global = env;
             // Declaraciones y enlaces preceden a cualquier inicializador.
@@ -519,12 +578,9 @@ pub const Interprete = struct {
             };
             for (unidad.enlaces) |enlace| {
                 const origen = entornos.get(enlace.unidad).?;
-                if (origen.obtener(enlace.nombre)) |val| {
-                    try env.definir(self.allocator, enlace.nombre, val);
-                } else {
-                    std.debug.print("ERROR: {s} no esta en el entorno origen!\n", .{enlace.nombre});
-                    return error.ErrorEjecucion;
-                }
+                const val = origen.obtener(enlace.nombre) orelse
+                    return self.fallar("'{s}' no está definido en el módulo de origen", .{enlace.nombre});
+                try env.definir(self.allocator, enlace.nombre, val);
             }
             for (unidad.stmts) |*s| switch (s.dato) {
                 .funcion, .estructura, .modelo, .importar => {},
@@ -540,6 +596,8 @@ pub const Interprete = struct {
     }
 
     pub fn ejecutar(self: *Interprete, programa: []Stmt) ErrorEjec!void {
+        const marca = self.raices_temporales.items.len;
+        defer self.raices_temporales.items.len = marca;
         for (programa) |*s| {
             switch (s.dato) {
                 .funcion => |*f| try self.global.definir(self.allocator, f.nombre, .{ .funcion = f }),
@@ -569,6 +627,10 @@ pub const Interprete = struct {
     }
 
     fn ejecStmt(self: *Interprete, s: *Stmt, env: *Entorno) ErrorEjec!Flujo {
+        const marca = self.raices_temporales.items.len;
+        defer self.raices_temporales.items.len = marca;
+        try self.raices_temporales.append(self.allocator, @intFromPtr(env));
+        try self.puntoSeguro();
         self.stmt_pos = s.pos;
         switch (s.dato) {
             .declaracion => |d| {
@@ -676,7 +738,7 @@ pub const Interprete = struct {
                 var buf: Buffer = .empty;
                 defer buf.deinit(self.allocator);
                 try self.formatearValor(&buf, v);
-                break :blk .{ .falla = try self.crearFalla(_gc_blk: { const _s = try self.allocator.dupe(u8, buf.items); try self.registrarGc(.{ .texto = _s }); break :_gc_blk _s; }) };
+                break :blk .{ .falla = try self.crearFalla(try self.copiarTexto(buf.items)) };
             },
         };
         self.error_valor = falla;
@@ -739,6 +801,9 @@ pub const Interprete = struct {
 
     fn ejecMientras(self: *Interprete, m: Stmt.Mientras, env: *Entorno) ErrorEjec!Flujo {
         while (true) {
+            const marca = self.raices_temporales.items.len;
+            defer self.raices_temporales.items.len = marca;
+            try self.puntoSeguro();
             const c = try self.evalExpr(m.condicion, env);
             if (!try self.esVerdadero(c)) break;
             const f = try self.ejecBloque(m.cuerpo, env);
@@ -753,19 +818,28 @@ pub const Interprete = struct {
 
     fn ejecPara(self: *Interprete, p: Stmt.Para, env: *Entorno) ErrorEjec!Flujo {
         const iterable = try self.evalExpr(p.iterable, env);
-        // `para` sobre diccionario itera sus claves (texto).
-        const items: []const Valor = switch (iterable) {
-            .lista => |l| l.items,
+        // Se itera una instantánea: el cuerpo puede agregar elementos (lo que
+        // reubicaría `l.items`) o reemplazarlos. Cada elemento queda como raíz
+        // temporal de la sentencia para que el GC no lo libere a mitad del bucle.
+        const items: []Valor = switch (iterable) {
+            .lista => |l| try self.allocator.dupe(Valor, l.items),
+            // `para` sobre diccionario itera sus claves (texto).
             .diccionario => |d| blk: {
                 const claves = d.keys();
-                const buf = try self.a().alloc(Valor, claves.len);
+                const buf = try self.allocator.alloc(Valor, claves.len);
                 for (claves, 0..) |k, j| buf[j] = .{ .texto = k };
                 break :blk buf;
             },
             else => return self.fallar("'para' requiere una lista o diccionario (usa rango(n) para números)", .{}),
         };
+        defer self.allocator.free(items);
+        try self.raices_temporales.ensureUnusedCapacity(self.allocator, items.len);
+        for (items) |v| if (punteroValor(v)) |ptr| self.raices_temporales.appendAssumeCapacity(ptr);
         var i: usize = 0;
         while (i < items.len) : (i += 1) {
+            const marca = self.raices_temporales.items.len;
+            defer self.raices_temporales.items.len = marca;
+            try self.puntoSeguro();
             try env.definir(self.allocator, p.variable, try self.copiarValor(items[i]));
             const f = try self.ejecBloque(p.cuerpo, env);
             switch (f) {
@@ -820,8 +894,9 @@ pub const Interprete = struct {
         };
         // Una función `asincrona` devuelve una Promesa (resuelta de forma síncrona en v0.1).
         if (f.asincrona) {
-            const p = try self.a().create(Promesa);
+            const p = try self.allocator.create(Promesa);
             p.* = .{ .valor = resultado };
+            try self.registrarGc(.{ .promesa = p });
             return .{ .promesa = p };
         }
         return resultado;
@@ -861,6 +936,12 @@ pub const Interprete = struct {
     // — Evaluación de expresiones —
 
     fn evalExpr(self: *Interprete, e: *const Expr, env: *Entorno) ErrorEjec!Valor {
+        const valor = try self.evalExprInterna(e, env);
+        try self.proteger(valor);
+        return valor;
+    }
+
+    fn evalExprInterna(self: *Interprete, e: *const Expr, env: *Entorno) ErrorEjec!Valor {
         switch (e.*) {
             .literal_entero => |s| {
                 const n = std.fmt.parseInt(i64, s, 10) catch return self.fallar("desbordamiento de entero", .{});
@@ -891,8 +972,9 @@ pub const Interprete = struct {
                         if (inst.campos.get(ac.campo)) |val| return val;
                         for (inst.tipo.metodos) |*m| {
                             if (std.mem.eql(u8, m.nombre, ac.campo)) {
-                                const bm = try self.a().create(MetodoLigado);
+                                const bm = try self.allocator.create(MetodoLigado);
                                 bm.* = .{ .instancia = inst, .funcion = m };
+                                try self.registrarGc(.{ .metodo = bm });
                                 return .{ .metodo = bm };
                             }
                         }
@@ -906,16 +988,12 @@ pub const Interprete = struct {
                 }
             },
             .lista => |elems| {
-                const lst = try self.allocator.create(Lista);
-        lst.* = .empty;
-        try self.registrarGc(.{ .lista = lst });
+                const lst = try self.nuevaLista();
                 for (elems) |el| try lst.append(self.allocator, try self.copiarValor(try self.evalExpr(el, env)));
                 return .{ .lista = lst };
             },
             .diccionario => |pares| {
-                const d = try self.allocator.create(Diccionario);
-        d.* = .empty;
-        try self.registrarGc(.{ .diccionario = d });
+                const d = try self.nuevoDiccionario();
                 for (pares) |par| {
                     const clave = try self.comoTexto(try self.evalExpr(par.clave, env), "clave de diccionario");
                     const valor = try self.copiarValor(try self.evalExpr(par.valor, env));
@@ -999,7 +1077,7 @@ pub const Interprete = struct {
             defer out.deinit(self.allocator);
             try out.appendSlice(self.allocator, izq.texto);
             try out.appendSlice(self.allocator, der.texto);
-            return .{ .texto = _gc_blk: { const _s = try self.allocator.dupe(u8, out.items); try self.registrarGc(.{ .texto = _s }); break :_gc_blk _s; } };
+            return .{ .texto = try self.copiarTexto(out.items) };
         }
 
         // Igualdad general.
@@ -1054,7 +1132,8 @@ pub const Interprete = struct {
 
     fn evalLlamada(self: *Interprete, l: Expr.Llamada, env: *Entorno) ErrorEjec!Valor {
         const callee = try self.evalExpr(l.callee, env);
-        const argv = try self.a().alloc(Valor, l.args.len);
+        const argv = try self.allocator.alloc(Valor, l.args.len);
+        defer self.allocator.free(argv);
         for (l.args, 0..) |arg, i| argv[i] = try self.evalExpr(arg, env);
         switch (callee) {
             .nativa => |f| return f(self, argv),
@@ -1089,6 +1168,26 @@ pub const Interprete = struct {
         const _s = try out.toOwnedSlice(self.allocator);
         try self.registrarGc(.{ .texto = _s });
         return _s;
+    }
+
+    fn copiarTexto(self: *Interprete, s: []const u8) ErrorEjec![]const u8 {
+        const copia = try self.allocator.dupe(u8, s);
+        try self.registrarGc(.{ .texto = copia });
+        return copia;
+    }
+
+    fn nuevaLista(self: *Interprete) ErrorEjec!*Lista {
+        const lst = try self.allocator.create(Lista);
+        lst.* = .empty;
+        try self.registrarGc(.{ .lista = lst });
+        return lst;
+    }
+
+    fn nuevoDiccionario(self: *Interprete) ErrorEjec!*Diccionario {
+        const d = try self.allocator.create(Diccionario);
+        d.* = .empty;
+        try self.registrarGc(.{ .diccionario = d });
+        return d;
     }
 
     fn formatearValor(self: *Interprete, out: *Buffer, v: Valor) ErrorEjec!void {
@@ -1192,9 +1291,7 @@ fn nativaRango(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     } else {
         return interp.fallar("rango espera 1 o 2 argumentos", .{});
     }
-    const lst = try interp.allocator.create(Lista);
-        lst.* = .empty;
-        try interp.registrarGc(.{ .lista = lst });
+    const lst = try interp.nuevaLista();
     var k = inicio;
     while (k < fin) : (k += 1) try lst.append(interp.allocator, .{ .entero = k });
     return .{ .lista = lst };
@@ -1218,9 +1315,7 @@ fn nativaClaves(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
         .diccionario => |dd| dd,
         else => return interp.fallar("claves espera un diccionario", .{}),
     };
-    const lst = try interp.allocator.create(Lista);
-        lst.* = .empty;
-        try interp.registrarGc(.{ .lista = lst });
+    const lst = try interp.nuevaLista();
     for (d.keys()) |k| try lst.append(interp.allocator, .{ .texto = k });
     return .{ .lista = lst };
 }
@@ -1257,7 +1352,7 @@ fn nativaTexto(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     var buf: Buffer = .empty;
     defer buf.deinit(interp.allocator);
     try interp.formatearValor(&buf, args[0]);
-    return .{ .texto = _gc_blk: { const _s = try interp.allocator.dupe(u8, buf.items); try interp.registrarGc(.{ .texto = _s }); break :_gc_blk _s; } };
+    return .{ .texto = try interp.copiarTexto(buf.items) };
 }
 
 /// error(mensaje) → construye un valor de error (para `lanzar`).
@@ -1325,15 +1420,13 @@ fn cadDividir(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len != 2) return interp.fallar("dividir espera (texto, separador)", .{});
     const s = try interp.comoTexto(args[0], "texto");
     const sep = try interp.comoTexto(args[1], "separador");
-    const lst = try interp.allocator.create(Lista);
-        lst.* = .empty;
-        try interp.registrarGc(.{ .lista = lst });
+    const lst = try interp.nuevaLista();
     if (sep.len == 0) {
         try lst.append(interp.allocator, .{ .texto = s });
         return .{ .lista = lst };
     }
     var it = std.mem.splitSequence(u8, s, sep);
-    while (it.next()) |parte| try lst.append(interp.allocator, .{ .texto = parte });
+    while (it.next()) |parte| try lst.append(interp.allocator, .{ .texto = try interp.copiarTexto(parte) });
     return .{ .lista = lst };
 }
 fn cadUnir(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
@@ -1346,7 +1439,7 @@ fn cadUnir(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
         if (k > 0) try out.appendSlice(interp.allocator, sep);
         try out.appendSlice(interp.allocator, try interp.comoTexto(item, "elemento"));
     }
-    return .{ .texto = _gc_blk: { const _s = try interp.allocator.dupe(u8, out.items); try interp.registrarGc(.{ .texto = _s }); break :_gc_blk _s; } };
+    return .{ .texto = try interp.copiarTexto(out.items) };
 }
 fn cadReemplazar(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len != 3) return interp.fallar("reemplazar espera (texto, viejo, nuevo)", .{});
@@ -1354,20 +1447,24 @@ fn cadReemplazar(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     const viejo = try interp.comoTexto(args[1], "viejo");
     const nuevo = try interp.comoTexto(args[2], "nuevo");
     if (viejo.len == 0) return .{ .texto = s };
-    return .{ .texto = _gc_blk: { const _s = try std.mem.replaceOwned(u8, interp.allocator, s, viejo, nuevo); try interp.registrarGc(.{ .texto = _s }); break :_gc_blk _s; } };
+    const reemplazado = try std.mem.replaceOwned(u8, interp.allocator, s, viejo, nuevo);
+    try interp.registrarGc(.{ .texto = reemplazado });
+    return .{ .texto = reemplazado };
 }
 fn cadMayusculas(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len != 1) return interp.fallar("mayusculas espera 1 argumento", .{});
     const s = try interp.comoTexto(args[0], "texto");
-    const buf = try interp.a().alloc(u8, s.len);
+    const buf = try interp.allocator.alloc(u8, s.len);
     _ = std.ascii.upperString(buf, s);
+    try interp.registrarGc(.{ .texto = buf });
     return .{ .texto = buf };
 }
 fn cadMinusculas(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len != 1) return interp.fallar("minusculas espera 1 argumento", .{});
     const s = try interp.comoTexto(args[0], "texto");
-    const buf = try interp.a().alloc(u8, s.len);
+    const buf = try interp.allocator.alloc(u8, s.len);
     _ = std.ascii.lowerString(buf, s);
+    try interp.registrarGc(.{ .texto = buf });
     return .{ .texto = buf };
 }
 fn cadContiene(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
@@ -1379,7 +1476,7 @@ fn cadContiene(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
 fn cadRecortar(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len != 1) return interp.fallar("recortar espera 1 argumento", .{});
     const s = try interp.comoTexto(args[0], "texto");
-    return .{ .texto = std.mem.trim(u8, s, " \t\r\n") };
+    return .{ .texto = try interp.copiarTexto(std.mem.trim(u8, s, " \t\r\n")) };
 }
 fn cadEmpiezaCon(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len != 2) return interp.fallar("empieza_con espera (texto, prefijo)", .{});
@@ -1404,7 +1501,8 @@ fn sisLeerArchivo(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     const ruta = try interp.comoTexto(args[0], "ruta");
     const io = try ioDe(interp);
     const cwd: std.Io.Dir = .cwd();
-    const datos = cwd.readFileAlloc(io, ruta, interp.a(), @enumFromInt(limites.archivo_datos)) catch |err| return interp.fallar("no se pudo leer '{s}': {s}", .{ ruta, @errorName(err) });
+    const datos = cwd.readFileAlloc(io, ruta, interp.allocator, @enumFromInt(limites.archivo_datos)) catch |err| return interp.fallar("no se pudo leer '{s}': {s}", .{ ruta, @errorName(err) });
+    try interp.registrarGc(.{ .texto = datos });
     return .{ .texto = datos };
 }
 fn sisEscribirArchivo(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
@@ -1528,9 +1626,7 @@ const JsonParser = struct {
         try self.entrar();
         defer self.profundidad -= 1;
         self.pos += 1; // '['
-        const lst = try self.interp.allocator.create(Lista);
-        lst.* = .empty;
-        try self.interp.registrarGc(.{ .lista = lst });
+        const lst = try self.interp.nuevaLista();
         self.ws();
         if (self.pos < self.s.len and self.s[self.pos] == ']') {
             self.pos += 1;
@@ -1551,9 +1647,7 @@ const JsonParser = struct {
         try self.entrar();
         defer self.profundidad -= 1;
         self.pos += 1; // '{'
-        const d = try self.interp.allocator.create(Diccionario);
-        d.* = .empty;
-        try self.interp.registrarGc(.{ .diccionario = d });
+        const d = try self.interp.nuevoDiccionario();
         self.ws();
         if (self.pos < self.s.len and self.s[self.pos] == '}') {
             self.pos += 1;
@@ -1634,7 +1728,7 @@ fn jsonSerializar(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     var out: Buffer = .empty;
     defer out.deinit(interp.allocator);
     try jsonEscribir(interp, &out, args[0]);
-    return .{ .texto = _gc_blk: { const _s = try interp.allocator.dupe(u8, out.items); try interp.registrarGc(.{ .texto = _s }); break :_gc_blk _s; } };
+    return .{ .texto = try interp.copiarTexto(out.items) };
 }
 
 // — Librería estándar: red (cliente HTTP/HTTPS) —
@@ -1661,11 +1755,9 @@ fn redPeticion(interp: *Interprete, url: []const u8, metodo: std.http.Method, pa
     }) catch |err| return interp.fallar("error de red al pedir '{s}': {s}", .{ url, @errorName(err) });
 
     const codigo: i64 = @intFromEnum(resultado.status);
-    const cuerpo = try interp.a().dupe(u8, acumulador.written());
+    const cuerpo = try interp.copiarTexto(acumulador.written());
 
-    const d = try interp.allocator.create(Diccionario);
-        d.* = .empty;
-        try interp.registrarGc(.{ .diccionario = d });
+    const d = try interp.nuevoDiccionario();
     try d.put(interp.allocator, "estado", .{ .entero = codigo });
     try d.put(interp.allocator, "ok", .{ .logico = codigo >= 200 and codigo < 300 });
     try d.put(interp.allocator, "cuerpo", .{ .texto = cuerpo });
@@ -1678,7 +1770,8 @@ fn cabecerasDe(interp: *Interprete, v: Valor) ErrorEjec![]const std.http.Header 
         .diccionario => |dd| dd,
         else => return interp.fallar("las cabeceras deben ser un diccionario", .{}),
     };
-    const hs = try interp.a().alloc(std.http.Header, d.count());
+    const hs = try interp.allocator.alloc(std.http.Header, d.count());
+    errdefer interp.allocator.free(hs);
     for (d.keys(), 0..) |k, i| {
         hs[i] = .{ .name = k, .value = try interp.comoTexto(d.get(k).?, "valor de cabecera") };
     }
@@ -1689,6 +1782,7 @@ fn redObtener(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     if (args.len < 1 or args.len > 2) return interp.fallar("obtener espera (url) o (url, cabeceras)", .{});
     const url = try interp.comoTexto(args[0], "url");
     const extra: []const std.http.Header = if (args.len == 2) try cabecerasDe(interp, args[1]) else &.{};
+    defer if (args.len == 2) interp.allocator.free(extra);
     return redPeticion(interp, url, .GET, null, extra);
 }
 
@@ -1697,7 +1791,9 @@ fn redPublicar(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     const url = try interp.comoTexto(args[0], "url");
     const cuerpo = try interp.comoTexto(args[1], "cuerpo");
     if (args.len == 3) {
-        return redPeticion(interp, url, .POST, cuerpo, try cabecerasDe(interp, args[2]));
+        const extra = try cabecerasDe(interp, args[2]);
+        defer interp.allocator.free(extra);
+        return redPeticion(interp, url, .POST, cuerpo, extra);
     }
     const headers = [_]std.http.Header{.{ .name = "content-type", .value = "application/json" }};
     return redPeticion(interp, url, .POST, cuerpo, &headers);
@@ -1718,7 +1814,7 @@ fn redCodificarUrl(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
             },
         }
     }
-    return .{ .texto = _gc_blk: { const _s = try interp.allocator.dupe(u8, out.items); try interp.registrarGc(.{ .texto = _s }); break :_gc_blk _s; } };
+    return .{ .texto = try interp.copiarTexto(out.items) };
 }
 
 // — Pruebas —
@@ -2263,15 +2359,7 @@ test "librería estándar: json" {
     try esperarSalida(src, "Alma\n1\n[1,2,3]\n");
 }
 
-test "capacidad de arena en bucle de concatenacion" {
-    const fuente =
-        \\i = 0
-        \\s = ""
-        \\mientras i < 1000
-        \\    s = "x" + texto(i)
-        \\    i = i + 1
-        \\fin
-    ;
+fn comprobarGc(fuente: []const u8, salida: []const u8, maximo: usize) !void {
     const toks = try lexer.tokenizar(std.testing.allocator, fuente);
     defer std.testing.allocator.free(toks);
     var p = parser.Parser.init(std.testing.allocator, toks);
@@ -2279,22 +2367,179 @@ test "capacidad de arena en bucle de concatenacion" {
     const programa = try p.parsePrograma();
     var interp = try Interprete.init(std.testing.allocator);
     defer interp.deinit();
-    const pre = interp.arena.queryCapacity();
+    interp.gc_umbral = 128;
     interp.ejecutar(programa) catch |err| {
         if (interp.diag) |d| std.debug.print("diag: {s}\n", .{d});
         return err;
     };
-    // Verificar que el bucle se ejecutó realmente.
-    const val_i = interp.global.obtener("i").?;
-    try std.testing.expectEqual(@as(i64, 1000), val_i.entero);
-    const val_s = interp.global.obtener("s").?;
-    try std.testing.expectEqualStrings("x999", val_s.texto);
-    const post = interp.arena.queryCapacity();
-    const delta = post - pre;
-    std.debug.print("\n[arena] pre={d} post={d} delta={d} bytes\n", .{ pre, post, delta });
-    // Techo generoso: la arena retiene todas las cadenas intermedias; este
-    // límite detecta regresiones accidentales sin imponer un contrato de
-    // recuperación. Sustituir por comprobación de estabilización cuando se
-    // implemente recolección (docs/PROPUESTA-MEMORIA.md).
-    try std.testing.expect(delta < 2 * 1024 * 1024);
+    try interp.recolectar();
+    try std.testing.expectEqualStrings(salida, interp.textoSalida());
+    try std.testing.expect(interp.gc_recolecciones > 100);
+    try std.testing.expect(interp.memoria_gc.maximo < maximo);
+    try std.testing.expect(interp.arena.queryCapacity() < 64 * 1024);
+}
+
+test "GC presion 100000 concatenaciones listas diccionarios y texto" {
+    try comprobarGc(
+        \\i = 0
+        \\mientras i < 100000
+        \\    t = "a" + "b"
+        \\    l = [i, i + 1, i + 2]
+        \\    d = {"n": texto(i), "l": l}
+        \\    i = i + 1
+        \\fin
+        \\imprimir(i, t, l[2], d["n"])
+    , "100000 ab 100001 99999\n", 256 * 1024);
+}
+
+test "GC presion 100000 crecimiento de una cadena viva" {
+    try comprobarGc(
+        \\i = 0
+        \\s = ""
+        \\mientras i < 100000
+        \\    s = s + "x"
+        \\    i = i + 1
+        \\fin
+        \\imprimir(i, longitud(s))
+    , "100000 100000\n", 2 * 1024 * 1024);
+}
+
+test "GC presion 100000 metodos recursion retornos errores y promesas" {
+    try comprobarGc(
+        \\modelo Caja
+        \\    valor: texto
+        \\    funcion obtener()
+        \\        x = "temporal"
+        \\        retornar valor
+        \\    fin
+        \\fin
+        \\funcion bajar(n, valor)
+        \\    si n == 0
+        \\        retornar valor
+        \\    fin
+        \\    x = [n]
+        \\    retornar bajar(n - 1, valor)
+        \\fin
+        \\asincrona funcion futuro(v)
+        \\    retornar [v]
+        \\fin
+        \\funcion unir(a, b)
+        \\    x = {"a": a}
+        \\    retornar a + b
+        \\fin
+        \\i = 0
+        \\mientras i < 100000
+        \\    c = Caja(texto(i))
+        \\    r = unir("x" + texto(i), bajar(2, c.obtener()))
+        \\    p = futuro(r)
+        \\    intentar
+        \\        lanzar error("e" + texto(i))
+        \\    capturar (e)
+        \\        mensaje = e.mensaje
+        \\    fin
+        \\    intentar
+        \\        x = 1 / 0
+        \\    capturar (e)
+        \\        mensaje_interno = e.mensaje
+        \\    fin
+        \\    i = i + 1
+        \\fin
+        \\imprimir(i, r, mensaje, (esperar p)[0], mensaje_interno)
+    , "100000 x9999999999 e99999 x9999999999 división por cero\n", 512 * 1024);
+}
+
+test "GC conserva textos derivados y constructores parcialmente evaluados" {
+    try comprobarGc(
+        \\importar cadena
+        \\funcion mover()
+        \\    i = 0
+        \\    mientras i < 100
+        \\        basura = "x" + texto(i)
+        \\        i = i + 1
+        \\    fin
+        \\    retornar "z"
+        \\fin
+        \\i = 0
+        \\mientras i < 1000
+        \\    partes = cadena.dividir("xx," + texto(i), ",")
+        \\    recorte = cadena.recortar("   " + texto(i) + "  ")
+        \\    l = [partes[1], mover()]
+        \\    d = {recorte: mover()}
+        \\    i = i + 1
+        \\fin
+        \\imprimir(partes[1], recorte, l[0], d["999"])
+    , "999 999 999 z\n", 256 * 1024);
+}
+
+test "GC para itera una instantanea aunque el cuerpo agregue y reemplace" {
+    try comprobarGc(
+        \\l = [texto(1), texto(2)]
+        \\suma = ""
+        \\i = 0
+        \\para x en l
+        \\    agregar(l, "nuevo" + texto(i))
+        \\    l[0] = "reemplazo" + texto(i)
+        \\    j = 0
+        \\    mientras j < 20000
+        \\        basura = [texto(j)]
+        \\        j = j + 1
+        \\    fin
+        \\    suma = suma + x
+        \\    i = i + 1
+        \\fin
+        \\imprimir(suma, longitud(l), l[0])
+    , "12 4 reemplazo1\n", 256 * 1024);
+}
+
+test "GC recursion profunda con temporales en cada marco" {
+    try comprobarGc(
+        \\funcion bajar(n, acumulado)
+        \\    si n == 0
+        \\        retornar acumulado
+        \\    fin
+        \\    j = 0
+        \\    mientras j < 100
+        \\        basura = {"k": texto(j)}
+        \\        j = j + 1
+        \\    fin
+        \\    retornar bajar(n - 1, acumulado + texto(n))
+        \\fin
+        \\i = 0
+        \\mientras i < 20
+        \\    r = bajar(60, "")
+        \\    i = i + 1
+        \\fin
+        \\imprimir(longitud(r))
+    , "111\n", 512 * 1024);
+}
+
+test "GC marcado iterativo conserva ciclos y cadenas profundas" {
+    var interp = try Interprete.init(std.testing.allocator);
+    defer interp.deinit();
+    var actual: Valor = .nulo;
+    for (0..10000) |_| {
+        const lista = try interp.nuevaLista();
+        try lista.append(interp.allocator, actual);
+        actual = .{ .lista = lista };
+    }
+    try actual.lista.append(interp.allocator, actual);
+    try interp.global.definir(interp.allocator, "raiz", actual);
+    interp.raices_temporales.clearRetainingCapacity();
+    try interp.recolectar();
+    try std.testing.expectEqual(@as(usize, 10001), interp.gc_objetos.count());
+    _ = interp.global.asignar("raiz", .nulo);
+    try interp.recolectar();
+    try std.testing.expectEqual(@as(usize, 1), interp.gc_objetos.count());
+}
+
+fn probarGcSinMemoria(a: std.mem.Allocator) !void {
+    var interp = try Interprete.init(a);
+    defer interp.deinit();
+    _ = try interp.copiarTexto("descartable");
+    interp.raices_temporales.clearRetainingCapacity();
+    try interp.recolectar();
+}
+
+test "GC conserva propiedad y libera recursos ante fallos de asignacion" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, probarGcSinMemoria, .{});
 }
