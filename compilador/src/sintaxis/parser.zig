@@ -9,6 +9,7 @@ const std = @import("std");
 const lexer = @import("../lexico/lexer.zig");
 const tk = @import("../lexico/token.zig");
 const ast = @import("ast.zig");
+const limites = @import("../limites.zig");
 
 const Token = tk.Token;
 const Expr = ast.Expr;
@@ -21,6 +22,8 @@ pub const Parser = struct {
     pos: usize = 0,
     arena: std.heap.ArenaAllocator,
     diag: ?Diagnostico = null,
+    profundidad: usize = 0,
+    alturas: std.AutoHashMapUnmanaged(*Expr, usize) = .empty,
 
     pub const Diagnostico = struct { mensaje: []const u8, linea: usize, columna: usize };
 
@@ -79,9 +82,34 @@ pub const Parser = struct {
     }
 
     fn nuevoExpr(self: *Parser, e: Expr) ErrorParser!*Expr {
+        var altura: usize = 1;
+        switch (e) {
+            .unaria => |u| altura += self.alturas.get(u.operando).?,
+            .binaria => |b| altura += @max(self.alturas.get(b.izq).?, self.alturas.get(b.der).?),
+            .acceso => |v| altura += self.alturas.get(v.objeto).?,
+            .indice => |v| altura += @max(self.alturas.get(v.objeto).?, self.alturas.get(v.indice).?),
+            .llamada => |v| {
+                altura += self.alturas.get(v.callee).?;
+                for (v.args) |arg| altura = @max(altura, 1 + self.alturas.get(arg).?);
+            },
+            .lista => |v| for (v) |item| {
+                altura = @max(altura, 1 + self.alturas.get(item).?);
+            },
+            .diccionario => |v| for (v) |item| {
+                altura = @max(altura, 1 + @max(self.alturas.get(item.clave).?, self.alturas.get(item.valor).?));
+            },
+            else => {},
+        }
+        if (altura > limites.sintaxis) return self.fallar("límite de profundidad sintáctica excedido", .{});
         const p = try self.a().create(Expr);
         p.* = e;
+        try self.alturas.put(self.a(), p, altura);
         return p;
+    }
+
+    fn entrar(self: *Parser) ErrorParser!void {
+        if (self.profundidad >= limites.sintaxis) return self.fallar("límite de profundidad sintáctica excedido", .{});
+        self.profundidad += 1;
     }
 
     // — Programa y bloques —
@@ -100,6 +128,8 @@ pub const Parser = struct {
     }
 
     fn parseBloque(self: *Parser) ErrorParser![]Stmt {
+        try self.entrar();
+        defer self.profundidad -= 1;
         _ = try self.consumir(.sangria);
         var lista: std.ArrayListUnmanaged(Stmt) = .empty;
         while (!self.verificar(.desangria) and !self.verificar(.fin_de_archivo)) {
@@ -355,6 +385,8 @@ pub const Parser = struct {
     }
 
     fn parseEstructura(self: *Parser, exportar: bool) ErrorParser!Stmt.Dato {
+        try self.entrar();
+        defer self.profundidad -= 1;
         _ = try self.consumir(.kw_estructura);
         const nombre = try self.consumir(.identificador);
         try self.consumirNuevaLinea();
@@ -378,6 +410,8 @@ pub const Parser = struct {
     }
 
     fn parseModelo(self: *Parser, exportar: bool) ErrorParser!Stmt.Dato {
+        try self.entrar();
+        defer self.profundidad -= 1;
         _ = try self.consumir(.kw_modelo);
         const nombre = try self.consumir(.identificador);
         try self.consumirNuevaLinea();
@@ -481,6 +515,8 @@ pub const Parser = struct {
 
     fn parseUnario(self: *Parser) ErrorParser!*Expr {
         if (self.verificar(.no_logico) or self.verificar(.menos) or self.verificar(.kw_esperar)) {
+            try self.entrar();
+            defer self.profundidad -= 1;
             const op = self.avanzar().tipo;
             const operando = try self.parseUnario();
             return self.nuevoExpr(.{ .unaria = .{ .op = op, .operando = operando } });
@@ -498,6 +534,8 @@ pub const Parser = struct {
                 const campo = try self.consumir(.identificador);
                 e = try self.nuevoExpr(.{ .acceso = .{ .objeto = e, .campo = campo.lexema } });
             } else if (self.verificar(.corchete_izq)) {
+                try self.entrar();
+                defer self.profundidad -= 1;
                 _ = self.avanzar();
                 const idx = try self.parseExpr();
                 _ = try self.consumir(.corchete_der);
@@ -508,6 +546,8 @@ pub const Parser = struct {
     }
 
     fn finLlamada(self: *Parser, callee: *Expr) ErrorParser!*Expr {
+        try self.entrar();
+        defer self.profundidad -= 1;
         _ = try self.consumir(.paren_izq);
         var args: std.ArrayListUnmanaged(*Expr) = .empty;
         if (!self.verificar(.paren_der)) {
@@ -557,6 +597,8 @@ pub const Parser = struct {
                 return self.nuevoExpr(.{ .identificador = t.lexema });
             },
             .paren_izq => {
+                try self.entrar();
+                defer self.profundidad -= 1;
                 _ = self.avanzar();
                 const e = try self.parseExpr();
                 _ = try self.consumir(.paren_der);
@@ -569,6 +611,8 @@ pub const Parser = struct {
     }
 
     fn parseListaLiteral(self: *Parser) ErrorParser!*Expr {
+        try self.entrar();
+        defer self.profundidad -= 1;
         _ = try self.consumir(.corchete_izq);
         var elems: std.ArrayListUnmanaged(*Expr) = .empty;
         if (!self.verificar(.corchete_der)) {
@@ -587,6 +631,8 @@ pub const Parser = struct {
     }
 
     fn parseDiccLiteral(self: *Parser) ErrorParser!*Expr {
+        try self.entrar();
+        defer self.profundidad -= 1;
         _ = try self.consumir(.llave_izq);
         var pares: std.ArrayListUnmanaged(ast.Expr.ParClaveValor) = .empty;
         if (!self.verificar(.llave_der)) {
@@ -608,6 +654,65 @@ pub const Parser = struct {
 };
 
 // — Pruebas —
+
+fn comprobarProfundidad(fuente: []const u8, valido: bool) !void {
+    const toks = try lexer.tokenizar(std.testing.allocator, fuente);
+    defer std.testing.allocator.free(toks);
+    var p = Parser.init(std.testing.allocator, toks);
+    defer p.deinit();
+    if (valido) {
+        _ = try p.parsePrograma();
+    } else {
+        try std.testing.expectError(error.ErrorSintaxis, p.parsePrograma());
+        try std.testing.expectEqualStrings("límite de profundidad sintáctica excedido", p.diag.?.mensaje);
+        try std.testing.expect(p.diag.?.linea > 0 and p.diag.?.columna > 0);
+    }
+    try std.testing.expectEqual(@as(usize, 0), p.profundidad);
+}
+
+test "profundidad sintactica: parentesis y restauracion entre expresiones" {
+    const valido = "(" ** 64 ++ "1" ++ ")" ** 64 ++ "\n";
+    try comprobarProfundidad(valido ++ valido, true);
+    try comprobarProfundidad("(" ** 65 ++ "1" ++ ")" ** 65, false);
+}
+
+test "profundidad sintactica: altura de unarios binarios y postfijos" {
+    try comprobarProfundidad("-" ** 63 ++ "1", true);
+    try comprobarProfundidad("-" ** 64 ++ "1", false);
+    try comprobarProfundidad("1+" ** 63 ++ "1", true);
+    try comprobarProfundidad("1+" ** 64 ++ "1", false);
+    try comprobarProfundidad("a" ++ ".b" ** 63, true);
+    try comprobarProfundidad("a" ++ ".b" ** 64, false);
+    try comprobarProfundidad("f" ++ "()" ** 64, false);
+}
+
+test "profundidad sintactica: contenedores argumentos e indices" {
+    try comprobarProfundidad("[" ** 63 ++ "0" ++ "]" ** 63, true);
+    try comprobarProfundidad("[" ** 64 ++ "0" ++ "]" ** 64, false);
+    try comprobarProfundidad("{0:" ** 64 ++ "0" ++ "}" ** 64, false);
+    try comprobarProfundidad("f(" ** 64 ++ "0" ++ ")" ** 64, false);
+    try comprobarProfundidad("a[" ** 64 ++ "0" ++ "]" ** 64, false);
+}
+
+test "profundidad sintactica: bloques y expresiones comparten presupuesto" {
+    const a = std.testing.allocator;
+    var fuente: std.ArrayListUnmanaged(u8) = .empty;
+    defer fuente.deinit(a);
+    for (0..64) |i| {
+        try fuente.appendNTimes(a, ' ', i * 4);
+        try fuente.appendSlice(a, "si verdadero\n");
+    }
+    try fuente.appendNTimes(a, ' ', 64 * 4);
+    try fuente.appendSlice(a, "1\n");
+    for (0..64) |i| {
+        try fuente.appendNTimes(a, ' ', (63 - i) * 4);
+        try fuente.appendSlice(a, "fin\n");
+    }
+    try comprobarProfundidad(fuente.items, true);
+    const anidada = try std.mem.replaceOwned(u8, a, fuente.items, "1\n", "(1)\n");
+    defer a.free(anidada);
+    try comprobarProfundidad(anidada, false);
+}
 
 fn esperarAST(fuente: []const u8, esperado: []const u8) !void {
     const toks = try lexer.tokenizar(std.testing.allocator, fuente);

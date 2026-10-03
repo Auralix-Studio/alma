@@ -169,7 +169,7 @@ fn cmdAst(io: std.Io, gpa: std.mem.Allocator, ruta: []const u8) !void {
     var p = parser.Parser.init(gpa, tokens);
     defer p.deinit();
     const programa = p.parsePrograma() catch |err| {
-        if (p.diag) |d| std.debug.print("Error de sintaxis en {s}: {s} (L{d}:C{d})\n", .{ ruta, d.mensaje, d.linea, d.columna });
+        if (p.diag) |d| std.debug.print("{s}:{d}:{d}: error de sintaxis: {s}\n", .{ ruta, d.linea, d.columna, d.mensaje });
         return err;
     };
 

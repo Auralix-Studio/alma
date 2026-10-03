@@ -11,6 +11,11 @@ opcional, `|` = alternativa, `'x'` = token literal, `MAYUS` = token del lexer.
 
 Notación de líneas: `NL` = `nueva_linea`, `IND` = `sangria`, `DED` = `desangria`.
 
+Límite aprobado: 64 niveles activos combinados de bloques y expresiones anidadas,
+y altura máxima 64 para cada AST de expresión (hoja = 1). El nivel siguiente
+produce error de sintaxis con posición. Los niveles internos de precedencia no
+cuentan. Véase [el contrato de límites](../PROPUESTA-LIMITES.md) para el conteo.
+
 ---
 
 ## 1. Programa y bloques
