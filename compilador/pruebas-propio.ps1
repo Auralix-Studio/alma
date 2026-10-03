@@ -120,6 +120,36 @@ fin
     [void](Probar 'division-minimo' "funcion principal()`n    a = -9223372036854775807 - 1`n    imprimir(a / -1)`nfin`n" 'desbordamiento' 1)
     [void](Probar 'variable-indefinida' "funcion principal()`n    si falso`n        a = 1`n    fin`n    imprimir(a)`nfin`n" 'variable no definida' 1)
     [void](Probar 'condicion-invalida' "funcion principal()`n    a = 1`n    si a`n        imprimir(1)`n    fin`nfin`n" 'tipo incompatible' 1)
+    $recursion = @'
+funcion bajar(n: entero) -> entero
+    si n == 0
+        retornar 42
+    fin
+    retornar bajar(n - 1)
+fin
+'@
+    [void](Probar 'limite-llamadas-frontera' ($recursion + "funcion principal()`n    imprimir(bajar(62))`nfin`n") '42')
+    [void](Probar 'limite-llamadas' ($recursion + "funcion principal()`n    imprimir(`"antes`")`n    imprimir(bajar(63))`nfin`n") 'desbordamiento de pila' 1)
+    $r = Invocar (Join-Path $casos 'limite-llamadas.exe') @()
+    Comprobar ($r.Salida -eq 'antes') "La salida previa al error se perdió: '$($r.Salida)'"
+    $interpretado = Invocar $Alma @('ejecutar', (Join-Path $casos 'limite-llamadas.alma'))
+    Comprobar ($interpretado.Codigo -eq 1 -and $interpretado.Salida -eq 'antes') "El intérprete difiere en el límite de llamadas"
+
+    $esperadoGrande = (1..3000 | ForEach-Object { "linea $_" }) -join "`n"
+    [void](Probar 'salida-grande' @'
+funcion principal()
+    i = 1
+    mientras i <= 3000
+        imprimir("linea", i)
+        i = i + 1
+    fin
+fin
+'@ $esperadoGrande)
+    $muchas = "funcion principal()`n    a = 0`n" + ("    a = a + 1`n" * 400) + "    imprimir(a)`nfin`n"
+    [void](Probar 'muchos-temporales' $muchas '400')
+    $variables = "funcion principal()`n" + ((1..300 | ForEach-Object { "    v$_ = $_`n" }) -join '') + "    imprimir(v1 + v300)`nfin`n"
+    [void](Probar 'marco-grande' $variables '301')
+
     $rechazado = Guardar 'sin-texto-dinamico' "funcion principal()`n    imprimir(texto(42))`nfin`n"
     $r = Invocar $Alma @('compilar', $rechazado, '--backend=propio')
     Comprobar ($r.Codigo -ne 0 -and $r.Error.Contains('texto()')) 'Falta rechazo explícito de texto dinámico'
