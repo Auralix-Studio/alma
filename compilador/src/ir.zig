@@ -111,7 +111,7 @@ const Constructor = struct {
     }
     fn expr(self: *Constructor, e: *const ast.Expr) Error!Reg {
         switch (e.*) {
-            .literal_entero => |s| return self.literal(.{ .entero = std.fmt.parseInt(i64, s, 10) catch return self.fallo("entero fuera del rango i64") }),
+            .literal_entero => |s| return self.literal(.{ .entero = std.fmt.parseInt(i64, s, 10) catch return self.fallo("desbordamiento de entero") }),
             .literal_decimal => |s| return self.literal(.{ .decimal = std.fmt.parseFloat(f64, s) catch return self.fallo("decimal inválido") }),
             .literal_texto => |s| return self.literal(.{ .texto = try self.decodificar(s) }),
             .literal_bool => |b| return self.literal(.{ .logico = b }),

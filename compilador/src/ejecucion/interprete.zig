@@ -323,6 +323,7 @@ pub const Interprete = struct {
         const m = try self.nuevoModulo("red");
         try self.miembro(m, "obtener", .{ .nativa = &redObtener });
         try self.miembro(m, "publicar", .{ .nativa = &redPublicar });
+        try self.miembro(m, "codificar_url", .{ .nativa = &redCodificarUrl });
         return m;
     }
 
@@ -351,7 +352,12 @@ pub const Interprete = struct {
             };
             for (unidad.enlaces) |enlace| {
                 const origen = entornos.get(enlace.unidad).?;
-                try env.definir(self.a(), enlace.nombre, origen.obtener(enlace.nombre).?);
+                if (origen.obtener(enlace.nombre)) |val| {
+                    try env.definir(self.a(), enlace.nombre, val);
+                } else {
+                    std.debug.print("ERROR: {s} no esta en el entorno origen!\n", .{enlace.nombre});
+                    return error.ErrorEjecucion;
+                }
             }
             for (unidad.stmts) |*s| switch (s.dato) {
                 .funcion, .estructura, .modelo, .importar => {},
@@ -687,7 +693,7 @@ pub const Interprete = struct {
     fn evalExpr(self: *Interprete, e: *const Expr, env: *Entorno) ErrorEjec!Valor {
         switch (e.*) {
             .literal_entero => |s| {
-                const n = std.fmt.parseInt(i64, s, 10) catch return self.fallar("entero inválido: {s}", .{s});
+                const n = std.fmt.parseInt(i64, s, 10) catch return self.fallar("desbordamiento de entero", .{});
                 return .{ .entero = n };
             },
             .literal_decimal => |s| {
@@ -919,7 +925,7 @@ pub const Interprete = struct {
             },
             .decimal => |d| {
                 var temporal: [512]u8 = undefined;
-                const bytes = std.fmt.bufPrint(&temporal, "{d}", .{d}) catch return self.fallar("no se pudo formatear el decimal", .{});
+                const bytes = std.fmt.bufPrint(&temporal, "{}", .{d}) catch return self.fallar("no se pudo formatear el decimal", .{});
                 try out.appendSlice(self.a(), bytes);
             },
             .texto => |s| try out.appendSlice(self.a(), s),
@@ -1217,7 +1223,7 @@ fn sisLeerArchivo(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     const ruta = try interp.comoTexto(args[0], "ruta");
     const io = try ioDe(interp);
     const cwd: std.Io.Dir = .cwd();
-    const datos = cwd.readFileAlloc(io, ruta, interp.a(), .unlimited) catch |err| return interp.fallar("no se pudo leer '{s}': {s}", .{ ruta, @errorName(err) });
+    const datos = cwd.readFileAlloc(io, ruta, interp.a(), @enumFromInt(limites.archivo_datos)) catch |err| return interp.fallar("no se pudo leer '{s}': {s}", .{ ruta, @errorName(err) });
     return .{ .texto = datos };
 }
 fn sisEscribirArchivo(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
@@ -1455,6 +1461,8 @@ fn redPeticion(interp: *Interprete, url: []const u8, metodo: std.http.Method, pa
     var acumulador = std.Io.Writer.Allocating.init(gpa);
     defer acumulador.deinit();
 
+    // Timeout de conexión por defecto en std.http.Client de Zig no está expuesto
+    // directamente en FetchOptions en esta versión.
     const resultado = client.fetch(.{
         .location = .{ .url = url },
         .method = metodo,
@@ -1503,6 +1511,23 @@ fn redPublicar(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
     }
     const headers = [_]std.http.Header{.{ .name = "content-type", .value = "application/json" }};
     return redPeticion(interp, url, .POST, cuerpo, &headers);
+}
+
+fn redCodificarUrl(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
+    if (args.len != 1) return interp.fallar("codificar_url espera (texto)", .{});
+    const txt = try interp.comoTexto(args[0], "texto");
+    var out: Buffer = .empty;
+    for (txt) |c| {
+        switch (c) {
+            'A'...'Z', 'a'...'z', '0'...'9', '-', '_', '.', '~' => try out.append(interp.a(), c),
+            else => {
+                var hex: [3]u8 = undefined;
+                _ = std.fmt.bufPrint(&hex, "%{X:0>2}", .{c}) catch unreachable;
+                try out.appendSlice(interp.a(), &hex);
+            },
+        }
+    }
+    return .{ .texto = try out.toOwnedSlice(interp.a()) };
 }
 
 // — Pruebas —
@@ -2045,4 +2070,40 @@ test "librería estándar: json" {
         \\fin
     ;
     try esperarSalida(src, "Alma\n1\n[1,2,3]\n");
+}
+
+test "capacidad de arena en bucle de concatenacion" {
+    const fuente =
+        \\i = 0
+        \\s = ""
+        \\mientras i < 1000
+        \\    s = "x" + texto(i)
+        \\    i = i + 1
+        \\fin
+    ;
+    const toks = try lexer.tokenizar(std.testing.allocator, fuente);
+    defer std.testing.allocator.free(toks);
+    var p = parser.Parser.init(std.testing.allocator, toks);
+    defer p.deinit();
+    const programa = try p.parsePrograma();
+    var interp = try Interprete.init(std.testing.allocator);
+    defer interp.deinit();
+    const pre = interp.arena.queryCapacity();
+    interp.ejecutar(programa) catch |err| {
+        if (interp.diag) |d| std.debug.print("diag: {s}\n", .{d});
+        return err;
+    };
+    // Verificar que el bucle se ejecutó realmente.
+    const val_i = interp.global.obtener("i").?;
+    try std.testing.expectEqual(@as(i64, 1000), val_i.entero);
+    const val_s = interp.global.obtener("s").?;
+    try std.testing.expectEqualStrings("x999", val_s.texto);
+    const post = interp.arena.queryCapacity();
+    const delta = post - pre;
+    std.debug.print("\n[arena] pre={d} post={d} delta={d} bytes\n", .{ pre, post, delta });
+    // Techo generoso: la arena retiene todas las cadenas intermedias; este
+    // límite detecta regresiones accidentales sin imponer un contrato de
+    // recuperación. Sustituir por comprobación de estabilización cuando se
+    // implemente recolección (docs/PROPUESTA-MEMORIA.md).
+    try std.testing.expect(delta < 2 * 1024 * 1024);
 }
