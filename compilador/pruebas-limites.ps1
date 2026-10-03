@@ -70,4 +70,32 @@ fin
     Comprobar ($r.Codigo -eq 0 -and $r.Salida.Replace("`r`n", "`n") -eq "desbordamiento de pila`ndesbordamiento de pila`n42`n") "Captura y recuperación: $($r.Codigo) $($r.Error) $($r.Salida)"
 }
 
+if ($Seccion -in @('todo', 'c')) {
+    $bajar = @'
+funcion bajar(n: entero) -> entero
+    si n == 0
+        retornar 42
+    fin
+    retornar bajar(n - 1)
+fin
+
+'@
+    foreach ($n in @(62, 63)) {
+        $archivo = Guardar "frontera-$n.alma" ($bajar + "funcion principal()`n    i = 0`n    mientras i < 100`n        imprimir(bajar($n))`n        i = i + 1`n    fin`nfin`n")
+        $r = Ejecutar $Alma @('compilar', $archivo)
+        Comprobar ($r.Codigo -eq 0) "Compilar frontera: $($r.Error)"
+        $r = Ejecutar ([IO.Path]::ChangeExtension($archivo, '.exe')) @()
+        if ($n -eq 62) {
+            Comprobar ($r.Codigo -eq 0 -and $r.Salida.Replace("`r`n", "`n") -eq ("42`n" * 100)) "Retornos/frontera 64: $($r.Codigo) $($r.Error)"
+        } else {
+            Comprobar ($r.Codigo -eq 1 -and $r.Error.Contains('desbordamiento de pila')) "Frontera 65: $($r.Codigo) $($r.Error)"
+        }
+    }
+    $archivo = Guardar 'recursion-c.alma' "funcion repetir()`n    repetir()`nfin`nfuncion principal()`n    repetir()`nfin`n"
+    $r = Ejecutar $Alma @('compilar', $archivo)
+    Comprobar ($r.Codigo -eq 0) "Compilar recursión: $($r.Error)"
+    $r = Ejecutar ([IO.Path]::ChangeExtension($archivo, '.exe')) @()
+    Comprobar ($r.Codigo -eq 1 -and $r.Error.Contains('recursion-c.alma:2:5:') -and $r.Error.Contains('desbordamiento de pila')) "Recursión C: $($r.Codigo) $($r.Error)"
+}
+
 Write-Output "$script:comprobaciones comprobaciones de límites correctas ($Seccion)."

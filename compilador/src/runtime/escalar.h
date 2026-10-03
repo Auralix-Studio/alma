@@ -30,6 +30,11 @@ static Val txt_lit(const char* s,size_t n){ Val v={0}; v.tag=T_TXT; v.texto.dato
 static const char* alma_archivo = "programa";
 static size_t alma_linea = 0, alma_columna = 0;
 static _Noreturn void alma_error(const char* mensaje){ fprintf(stderr,"%s:%zu:%zu: %s\n",alma_archivo,alma_linea,alma_columna,mensaje); exit(1); }
+static size_t alma_profundidad_llamadas = 0;
+static void alma_entrar_llamada(void){
+    if(alma_profundidad_llamadas>=ALMA_LIMITE_LLAMADAS) alma_error("desbordamiento de pila");
+    alma_profundidad_llamadas++;
+}
 static Val alma_leer(Val v){ if(v.tag==T_INDEFINIDO) alma_error("variable no definida"); return v; }
 static Val alma_retener(Val v){
     v=alma_leer(v);
@@ -50,6 +55,7 @@ static void alma_guardar(Val* destino,Val propio){ alma_soltar(destino); *destin
 static Val alma_retornar(Val* registros,size_t n,size_t origen){
     Val resultado=alma_retener(registros[origen]);
     for(size_t i=0;i<n;i++) alma_soltar(&registros[i]);
+    alma_profundidad_llamadas--;
     return resultado;
 }
 static Val texto_nuevo(size_t longitud){

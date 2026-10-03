@@ -1,6 +1,7 @@
 //! Emisor C de la IR. La semántica y el orden de evaluación viven en ir.zig.
 const std = @import("std");
 const ir = @import("ir.zig");
+const limites = @import("limites.zig");
 const Error = error{OutOfMemory};
 const Emisor = struct {
     a: std.mem.Allocator,
@@ -82,6 +83,8 @@ const Emisor = struct {
                     try self.f("  alma_guardar(&v[{d}], {s}(v[{d}]));\n", .{ u.dst, nombre, u.src });
                 },
                 .llamar => |l| {
+                    // Comprobar antes de reservar el marco de la función destino.
+                    if (l.destino == .funcion) try self.e("  alma_entrar_llamada();\n");
                     try self.f("  alma_guardar(&v[{d}], ", .{l.dst});
                     switch (l.destino) {
                         .funcion => |fid| try self.f("af_{d}(", .{fid}),
@@ -107,6 +110,7 @@ const Emisor = struct {
 pub fn generar(a: std.mem.Allocator, programa: *const ir.Programa) Error![]u8 {
     var e = Emisor{ .a = a };
     errdefer e.out.deinit(a);
+    try e.f("#define ALMA_LIMITE_LLAMADAS {d}\n", .{limites.llamadas});
     try e.e(@embedFile("runtime/escalar.h"));
     try e.e("\n");
     for (programa.funciones, 0..) |fun, id| {
@@ -114,7 +118,7 @@ pub fn generar(a: std.mem.Allocator, programa: *const ir.Programa) Error![]u8 {
         try e.e(";\n");
     }
     for (programa.funciones, 0..) |fun, id| try e.funcion(id, fun);
-    try e.f("int main(void){{ Val resultado=af_{d}(); alma_soltar(&resultado);\n", .{programa.entrada});
+    try e.f("int main(void){{ alma_entrar_llamada(); Val resultado=af_{d}(); alma_soltar(&resultado);\n", .{programa.entrada});
     try e.e("#ifdef ALMA_VERIFICAR_MEMORIA\n  if(alma_textos_vivos) alma_error(\"textos sin liberar\");\n#endif\n  return 0;\n}\n");
     return e.out.toOwnedSlice(a);
 }
