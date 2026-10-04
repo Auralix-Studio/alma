@@ -34,6 +34,7 @@
 - [Camino a un compilador independiente](planes/PLAN-INDEPENDENCIA.md)
 - [Hoja de ruta](planes/HOJA-DE-RUTA.md)
 - [Autohospedaje](planes/AUTOHOSPEDAJE.md)
+- [Publicación: CLI, extensión y marca](planes/PUBLICACION.md)
 - [Aplicación de aprendizaje estilo Mimo](planes/APP-APRENDIZAJE.md)
 
 ## Informes
