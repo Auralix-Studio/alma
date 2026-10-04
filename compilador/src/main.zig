@@ -26,7 +26,7 @@ const ir = @import("ir.zig");
 const limites = @import("limites.zig");
 const builtin = @import("builtin");
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 
 pub fn main(init: process.Init.Minimal) void {
     ejecutarCli(init) catch |err| {

@@ -7,7 +7,7 @@ set -eu
 DIR="${1:?Uso: sh generar-sumas.sh <directorio-con-binarios>}"
 cd "$DIR"
 encontrados=""
-for n in alma alma-linux-x64 alma-macos-x64 alma-macos-arm64 alma.exe alma-windows-x64.exe; do
+for n in alma alma-linux-x64 alma-linux-arm64 alma-macos-x64 alma-macos-arm64 alma.exe alma-windows-x64.exe; do
     [ -f "$n" ] && encontrados="$encontrados $n"
 done
 if [ -z "$encontrados" ]; then

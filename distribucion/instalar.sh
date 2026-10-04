@@ -1,20 +1,37 @@
 #!/bin/sh
-# Instalador de Alma para Linux x64 (por usuario, sin sudo).
+# Instalador de Alma para Linux x64 y ARM64, incluido Android con Termux
+# (por usuario, sin sudo).
 #
 # En un comando (descarga la última versión publicada):
 #   curl -fsSL https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.sh | sh
-# Una versión concreta: ... | ALMA_VERSION=v0.1.0 sh
+# Una versión concreta: ... | ALMA_VERSION=v0.1.1 sh
 #
-# Sin conexión: coloca este script junto al binario (alma-linux-x64 o alma) y a
-# SHA256SUMS.txt, y ejecuta:  sh instalar.sh
+# Sin conexión: coloca este script junto al binario (alma-linux-x64,
+# alma-linux-arm64 o alma) y a SHA256SUMS.txt, y ejecuta:  sh instalar.sh
 #
+# Destino: ~/.local/bin; en Termux, $PREFIX/bin (ya está en el PATH).
 # La instalación se aborta si falta SHA256SUMS.txt, si el binario no figura en él
 # con su nombre exacto, si no hay herramienta de hash o si el hash no coincide.
 # Sin colores: NO_COLOR=1.
 set -eu
 
 REPOSITORIO="Auralix-Studio/alma"
-DEST="$HOME/.local/bin"
+
+# Termux (Android): instala en $PREFIX/bin, que ya forma parte del PATH.
+case "${PREFIX:-}" in
+    */com.termux/*) TERMUX=1 ;;
+    *) TERMUX="${TERMUX_VERSION:+1}" ;;
+esac
+if [ -n "$TERMUX" ]; then DEST="$PREFIX/bin"; else DEST="$HOME/.local/bin"; fi
+
+SO="$(uname -s)"
+ARQ="$(uname -m)"
+case "$SO/$ARQ" in
+    Linux/x86_64|Linux/amd64) NOMBRE="alma-linux-x64"; PLATAFORMA="Linux x64" ;;
+    Linux/aarch64|Linux/arm64) NOMBRE="alma-linux-arm64"; PLATAFORMA="Linux ARM64" ;;
+    *) NOMBRE=""; PLATAFORMA="$SO/$ARQ" ;;
+esac
+if [ -n "$TERMUX" ]; then PLATAFORMA="$PLATAFORMA (Termux)"; fi
 
 # — Presentación —
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != "dumb" ]; then
@@ -46,7 +63,7 @@ esac
 SRC=""
 SRC_NAME=""
 if [ -n "$DIR" ]; then
-    for n in alma-linux-x64 alma; do
+    for n in $NOMBRE alma; do
         if [ -f "$DIR/$n" ]; then SRC="$DIR/$n"; SRC_NAME="$n"; break; fi
     done
 fi
@@ -54,18 +71,16 @@ TEMPORAL=""
 if [ -n "$SRC" ]; then
     info "Instalación sin conexión desde $DIR"
 else
-    SO="$(uname -s)"
-    ARQ="$(uname -m)"
-    case "$SO/$ARQ" in
-        Linux/x86_64|Linux/amd64) SRC_NAME="alma-linux-x64" ;;
-        *) fallar "Todavía no se publican binarios para $SO/$ARQ (solo Linux x64 y Windows x64)." ;;
-    esac
+    if [ -z "$NOMBRE" ]; then
+        fallar "Todavía no se publican binarios para $PLATAFORMA (hay Linux x64, Linux ARM64 —también Termux— y Windows x64; los móviles ARM de 32 bits no están soportados)."
+    fi
+    SRC_NAME="$NOMBRE"
     if [ -n "${ALMA_VERSION:-}" ]; then
         BASE="https://github.com/$REPOSITORIO/releases/download/$ALMA_VERSION"
-        info "Plataforma: Linux x64  ·  versión $ALMA_VERSION"
+        info "Plataforma: $PLATAFORMA  ·  versión $ALMA_VERSION"
     else
         BASE="https://github.com/$REPOSITORIO/releases/latest/download"
-        info "Plataforma: Linux x64  ·  última versión"
+        info "Plataforma: $PLATAFORMA  ·  última versión"
     fi
     TEMPORAL="$(mktemp -d)"
     trap 'rm -rf "$TEMPORAL"' EXIT INT TERM
@@ -112,7 +127,8 @@ cp "$SRC" "$DEST/alma"
 chmod +x "$DEST/alma"
 paso "Instalado en $DEST/alma"
 
-INSTALADA="$("$DEST/alma" version)"
+INSTALADA="$("$DEST/alma" version 2>&1)" || fallar "Alma se instaló en $DEST/alma pero no pudo ejecutarse en este sistema: $INSTALADA
+     Comunícalo en https://github.com/$REPOSITORIO/issues indicando: $PLATAFORMA, $(uname -r)"
 printf '\n  %s%s¡Listo!%s %s está instalado.\n\n' "$NEGRITA" "$AMBAR" "$FIN" "$INSTALADA"
 case ":$PATH:" in
     *":$DEST:"*) : ;;
