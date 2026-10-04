@@ -1,9 +1,15 @@
 name: Publicar versión
 
-# Se dispara al subir una etiqueta vX.Y.Z (o vX.Y.Z-rc.N para versiones de prueba).
+# Publicación automática: al llegar a main un cambio de VERSION en
+# compilador/src/main.zig, se publica v<VERSION> si todavía no existe.
+# También se puede publicar a mano subiendo una etiqueta vX.Y.Z (o vX.Y.Z-rc.N
+# para versiones de prueba) o desde la pestaña Actions (workflow_dispatch).
 on:
   push:
+    branches: [ "main" ]
+    paths: [ "compilador/src/main.zig" ]
     tags: [ "v*" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,10 +18,40 @@ env:
   ZIG_VERSION: 0.16.0
 
 jobs:
+  decidir:
+    name: Decidir la versión a publicar
+    runs-on: ubuntu-latest
+    outputs:
+      etiqueta: ${{ steps.version.outputs.etiqueta }}
+      publicar: ${{ steps.version.outputs.publicar }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^const VERSION = "\(.*\)";/\1/p' compilador/src/main.zig)
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then etiqueta="$GITHUB_REF_NAME"; else etiqueta="v$version"; fi
+          if gh release view "$etiqueta" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "La versión $etiqueta ya está publicada: no hay nada que hacer."
+            publicar=false
+          else
+            echo "Se publicará $etiqueta."
+            publicar=true
+          fi
+          echo "etiqueta=$etiqueta" >> "$GITHUB_OUTPUT"
+          echo "publicar=$publicar" >> "$GITHUB_OUTPUT"
+
   construir:
     name: Construir binarios y extensión
+    needs: decidir
+    if: needs.decidir.outputs.publicar == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      ETIQUETA: ${{ needs.decidir.outputs.etiqueta }}
     steps:
       - uses: actions/checkout@v4
 
@@ -36,9 +72,9 @@ jobs:
         shell: bash
         run: |
           version=$(sed -n 's/^const VERSION = "\(.*\)";/\1/p' compilador/src/main.zig)
-          base="${GITHUB_REF_NAME#v}"; base="${base%%-*}"
+          base="${ETIQUETA#v}"; base="${base%%-*}"
           if [ "$version" != "$base" ]; then
-            echo "La etiqueta $GITHUB_REF_NAME no coincide con VERSION = \"$version\" en main.zig" >&2
+            echo "La etiqueta $ETIQUETA no coincide con VERSION = \"$version\" en main.zig" >&2
             exit 1
           fi
 
@@ -122,10 +158,12 @@ jobs:
 
   publicar:
     name: Publicar en GitHub Releases y tiendas
-    needs: probar
+    needs: [ decidir, probar ]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      ETIQUETA: ${{ needs.decidir.outputs.etiqueta }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -139,14 +177,16 @@ jobs:
         run: |
           set -euo pipefail
           prueba=""
-          case "$GITHUB_REF_NAME" in *-*) prueba="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --repo "$GITHUB_REPOSITORY" --title "Alma $GITHUB_REF_NAME" --generate-notes $prueba
+          case "$ETIQUETA" in *-*) prueba="--prerelease" ;; esac
+          # --target crea la etiqueta sobre este commit cuando la publicación
+          # viene de un push a main (con etiqueta ya existente no tiene efecto).
+          gh release create "$ETIQUETA" dist/* --target "$GITHUB_SHA" \
+            --repo "$GITHUB_REPOSITORY" --title "Alma $ETIQUETA" --generate-notes $prueba
 
       # Solo en versiones definitivas y si los tokens están configurados como
       # secretos del repositorio (VSCE_PAT y OVSX_PAT).
       - name: Publicar la extensión
-        if: ${{ !contains(github.ref_name, '-') }}
+        if: ${{ !contains(needs.decidir.outputs.etiqueta, '-') }}
         shell: bash
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}

@@ -108,7 +108,7 @@ zig build diferencial           # intérprete vs backends nativos
 | **Paquetes** | Manifiesto `alma.paquete` + `alma paquete validar` |
 | **Análisis** | `alma analizar` detecta errores antes de ejecutar: nombres, aridad, contexto, constantes, y **chequeo de tipos gradual** |
 | **Compilación nativa** | Backend C vía `zig cc` y backend propio experimental Windows x64 con `--backend=propio` |
-| **CLI** | `alma nuevo`, `alma ejecutar`, `alma compilar`, `alma analizar`, `alma paquete`, `alma tokens`, `alma ast` |
+| **CLI** | `alma nuevo`, `alma ejecutar`, `alma compilar`, `alma analizar`, `alma paquete`, `alma actualizar`, `alma tokens`, `alma ast` |
 | **Editor** | Extensión de VS Code con resaltado de sintaxis |
 
 **En camino:** paralelismo real (event loop / hilos nativos), FFI con C (`externa`), y un
@@ -129,6 +129,7 @@ alma analizar <archivo.alma>   Revisa el código en busca de errores (linter).
 alma paquete  <validar|info>   Valida el manifiesto alma.paquete del proyecto.
 alma tokens   <archivo.alma>   Muestra el flujo de tokens (desarrollo).
 alma ast      <archivo.alma>   Muestra el árbol de sintaxis (desarrollo).
+alma actualizar                Instala la última versión publicada (verifica SHA-256).
 alma version                   Versión de Alma.
 alma ayuda                     Ayuda.
 ```

@@ -19,6 +19,7 @@ const interprete = @import("ejecucion/interprete.zig");
 const analizador = @import("semantica/analizador.zig");
 const modulos = @import("modulos.zig");
 const paquete = @import("paquete.zig");
+const actualizar = @import("actualizar.zig");
 const codegen_c = @import("codegen_c.zig");
 const codegen_pe = @import("codegen_pe.zig");
 const ir = @import("ir.zig");
@@ -94,6 +95,8 @@ fn ejecutarCli(init: process.Init.Minimal) !void {
     } else if (esIgual(comando, "paquete")) {
         const sub = if (args.len >= 3) args[2] else "";
         try cmdPaquete(io, gpa, sub);
+    } else if (esIgual(comando, "actualizar")) {
+        try cmdActualizar(io, gpa, args[2..]);
     } else if (esIgual(comando, "version") or esIgual(comando, "--version")) {
         try escribir(io, "Alma " ++ VERSION ++ "\n");
     } else if (esIgual(comando, "ayuda") or esIgual(comando, "--help") or esIgual(comando, "-h")) {
@@ -489,6 +492,33 @@ fn cmdNuevo(io: std.Io, gpa: std.mem.Allocator, nombre: []const u8) !void {
     try escribir(io, resumen);
 }
 
+fn cmdActualizar(io: std.Io, gpa: std.mem.Allocator, args: []const [:0]const u8) !void {
+    var opciones: actualizar.Opciones = .{};
+    for (args) |arg| {
+        if (esIgual(arg, "--comprobar")) {
+            opciones.solo_comprobar = true;
+        } else if (std.mem.startsWith(u8, arg, "--version=") and arg.len > "--version=".len) {
+            opciones.version = arg["--version=".len..];
+        } else {
+            std.debug.print("Uso: alma actualizar [--comprobar] [--version=vX.Y.Z]\n", .{});
+            return error.OpcionesInvalidas;
+        }
+    }
+    var arena_st = std.heap.ArenaAllocator.init(gpa);
+    defer arena_st.deinit();
+    const arena = arena_st.allocator();
+    const resultado = actualizar.actualizar(io, arena, VERSION, opciones) catch |err| {
+        std.debug.print("No se pudo actualizar Alma: {s}\n", .{@errorName(err)});
+        return err;
+    };
+    const mensaje = switch (resultado) {
+        .al_dia => |v| try std.fmt.allocPrint(arena, "Alma {s} ya es la última versión publicada ({s}).\n", .{ VERSION, v }),
+        .disponible => |v| try std.fmt.allocPrint(arena, "Hay una versión nueva: {s} (instalada: {s}). Ejecuta 'alma actualizar'.\n", .{ v, VERSION }),
+        .actualizado => |v| try std.fmt.allocPrint(arena, "Alma actualizado de {s} a {s}. Comprueba con 'alma version'.\n", .{ VERSION, v }),
+    };
+    try escribir(io, mensaje);
+}
+
 fn cmdPaquete(io: std.Io, gpa: std.mem.Allocator, sub: []const u8) !void {
     const cwd: std.Io.Dir = .cwd();
     const fuente = cwd.readFileAlloc(io, "alma.paquete", gpa, @enumFromInt(limites.archivo_fuente)) catch |err| {
@@ -589,6 +619,9 @@ fn imprimirAyuda(io: std.Io) !void {
         \\  tokens   <archivo.alma>   Muestra el flujo de tokens (desarrollo).
         \\  ast      <archivo.alma>   Muestra el AST del programa (desarrollo).
         \\  ir       <archivo.alma>   Muestra la IR escalar en JSON (desarrollo).
+        \\  actualizar                Instala la última versión publicada (verifica SHA-256).
+        \\    --comprobar           Solo indica si hay una versión nueva.
+        \\    --version=vX.Y.Z      Instala una versión concreta (también de prueba).
         \\  version                   Muestra la versión de Alma.
         \\  ayuda                     Muestra esta ayuda.
         \\
