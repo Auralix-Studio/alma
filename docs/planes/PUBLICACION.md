@@ -44,12 +44,12 @@ instalar (el modo actual, con el binario al lado, se conserva para uso sin red):
 
 ```powershell
 # Windows (PowerShell)
-irm https://github.com/Auralix-Studio/alma/releases/latest/download/instalar.ps1 | iex
+irm https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.ps1 | iex
 ```
 
 ```sh
 # Linux / macOS
-curl -fsSL https://github.com/Auralix-Studio/alma/releases/latest/download/instalar.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.sh | sh
 ```
 
 Después:

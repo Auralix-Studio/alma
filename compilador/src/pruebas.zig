@@ -1,4 +1,4 @@
-//! pruebas.zig — Raíz que agrega todos los tests del compilador.
+//! pruebas.zig â€” RaÃ­z que agrega todos los tests del compilador.
 //! Se ejecuta con `zig build test`.
 
 test {
@@ -15,4 +15,5 @@ test {
     _ = @import("codegen_c.zig");
     _ = @import("codegen_pe.zig");
     _ = @import("modulos.zig");
+    _ = @import("actualizar.zig");
 }

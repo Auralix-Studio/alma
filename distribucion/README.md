@@ -13,7 +13,7 @@ dependencias). macOS y ARM están previstos más adelante.
 **Windows** (PowerShell, sin permisos de administrador):
 
 ```powershell
-irm https://github.com/Auralix-Studio/alma/releases/latest/download/instalar.ps1 | iex
+irm https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.ps1 | iex
 ```
 
 Instala en `%LOCALAPPDATA%\Programs\Alma\alma.exe` y lo agrega al `PATH` del usuario.
@@ -21,7 +21,7 @@ Instala en `%LOCALAPPDATA%\Programs\Alma\alma.exe` y lo agrega al `PATH` del usu
 **Linux:**
 
 ```sh
-curl -fsSL https://github.com/Auralix-Studio/alma/releases/latest/download/instalar.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.sh | sh
 ```
 
 Instala en `~/.local/bin/alma`.
@@ -36,12 +36,17 @@ alma ejecutar hola.alma
 ### Una versión concreta
 
 ```powershell
-$env:ALMA_VERSION = "v0.1.0"; irm https://github.com/Auralix-Studio/alma/releases/download/v0.1.0/instalar.ps1 | iex
+$env:ALMA_VERSION = "v0.1.0"; irm https://raw.githubusercontent.com/Auralix-Studio/alma/v0.1.0/distribucion/instalar.ps1 | iex
 ```
 
 ```sh
-curl -fsSL https://github.com/Auralix-Studio/alma/releases/download/v0.1.0/instalar.sh | ALMA_VERSION=v0.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/Auralix-Studio/alma/v0.1.0/distribucion/instalar.sh | ALMA_VERSION=v0.1.0 sh
 ```
+
+El script de instalación se sirve desde el repositorio (`raw.githubusercontent.com`,
+como texto UTF-8): GitHub Releases lo entrega como binario y PowerShell 5.1 lo
+leería como Latin-1, corrompiendo acentos y símbolos. El script, a su vez,
+descarga el binario y las sumas de GitHub Releases.
 
 ## Verificación de integridad (siempre)
 
@@ -70,6 +75,20 @@ sh instalar.sh
 Si compilaste Alma tú mismo (`zig build -Doptimize=ReleaseSafe`), genera las
 sumas de tu binario con `sh generar-sumas.sh <carpeta>` antes de instalar.
 
+## Actualizar
+
+```
+alma actualizar               # instala la última versión estable si es más nueva
+alma actualizar --comprobar   # solo dice si hay una versión nueva
+alma actualizar --version=v0.1.0-rc.1   # una versión concreta, también de prueba
+```
+
+Descarga de GitHub Releases el binario de tu plataforma y el `SHA256SUMS.txt` de
+esa versión, verifica el SHA-256 y solo entonces reemplaza el ejecutable. En
+Windows el ejecutable anterior queda como `alma.exe.anterior` (se borra en la
+siguiente actualización). Volver a ejecutar el comando de instalación también
+actualiza.
+
 ## Desinstalar
 
 - **Windows:** `powershell -ExecutionPolicy Bypass -File .\desinstalar.ps1`
@@ -79,17 +98,29 @@ Alma es un único archivo: desinstalar borra ese binario y lo quita del `PATH`.
 
 ## Cómo se publica una versión (mantenedores)
 
-1. Actualiza `VERSION` en `compilador/src/main.zig` (y la versión de
-   `editores/vscode-alma/package.json` si cambió la extensión).
-2. Crea y sube la etiqueta: `git tag v0.1.0 && git push origin v0.1.0`
-   (`v0.1.0-rc.1` para una versión de prueba, que se marca como *prerelease* y no
-   publica la extensión en las tiendas).
-3. `.github/workflows/release.yml`:
-   - corre las pruebas;
-   - compila cada binario dos veces desde cachés vacías y exige que sean iguales
-     byte a byte;
-   - genera `SHA256SUMS.txt`, empaqueta la extensión;
-   - prueba los instaladores en Windows y Linux;
-   - publica la versión en GitHub Releases.
-4. La extensión se publica en VS Code Marketplace y Open VSX si existen los
-   secretos `VSCE_PAT` y `OVSX_PAT` en el repositorio.
+La publicación es automática y la hace `.github/workflows/release.yml`:
+
+- **Versión estable:** sube `VERSION` en `compilador/src/main.zig` (por ejemplo
+  a `0.2.0`) y fusiona en `main`. Si `v0.2.0` todavía no está publicada, el
+  flujo la crea; si ya existe, no hace nada.
+- **Versión de prueba:** sube una etiqueta con sufijo, por ejemplo
+  `git tag v0.2.0-rc.1 && git push origin v0.2.0-rc.1`. Se marca como
+  *prerelease*: `alma actualizar` no la instala salvo con `--version`, y no
+  publica la extensión en las tiendas.
+- También se puede lanzar a mano desde la pestaña *Actions* («Publicar versión»).
+
+En cada publicación el flujo:
+
+1. corre las pruebas;
+2. compila Windows x64 y Linux x64 dos veces desde cachés vacías y exige que
+   los binarios sean iguales byte a byte;
+3. genera `SHA256SUMS.txt` y empaqueta la extensión;
+4. instala con `instalar.ps1`/`instalar.sh` en Windows y Linux y ejecuta un
+   ejemplo;
+5. publica la versión en GitHub Releases;
+6. publica la extensión en VS Code Marketplace y Open VSX si existen los
+   secretos `VSCE_PAT` y `OVSX_PAT` (solo versiones estables).
+
+Si cambió la extensión, sube también la versión de
+`editores/vscode-alma/package.json`: las tiendas rechazan volver a publicar el
+mismo número.
