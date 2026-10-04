@@ -101,7 +101,8 @@ jobs:
           }
           compilar x86_64-windows-gnu alma.exe alma-windows-x64.exe
           compilar x86_64-linux-musl alma alma-linux-x64
-          chmod +x ../dist/alma-linux-x64
+          compilar aarch64-linux-musl alma alma-linux-arm64
+          chmod +x ../dist/alma-linux-x64 ../dist/alma-linux-arm64
 
       - name: Sumas SHA-256 e instaladores
         shell: bash
@@ -127,7 +128,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest ]
+        # ubuntu-24.04-arm: Linux ARM64, la misma arquitectura que Android/Termux.
+        os: [ ubuntu-latest, ubuntu-24.04-arm, windows-latest ]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -141,10 +143,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          chmod +x dist/alma-linux-x64
+          chmod +x dist/alma-linux-x64 dist/alma-linux-arm64
           sh dist/instalar.sh
           "$HOME/.local/bin/alma" version
           "$HOME/.local/bin/alma" ejecutar ejemplos/basicos/factorial.alma
+
+      # Simula el entorno de Termux (PREFIX bajo com.termux): debe instalar en
+      # $PREFIX/bin. No sustituye una prueba en un Android real.
+      - name: Instalar como en Termux (Linux ARM64)
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PREFIX="$RUNNER_TEMP/data/data/com.termux/files/usr"
+          mkdir -p "$PREFIX/bin"
+          PATH="$PREFIX/bin:$PATH" sh dist/instalar.sh
+          "$PREFIX/bin/alma" version
+          "$PREFIX/bin/alma" ejecutar ejemplos/basicos/factorial.alma
 
       - name: Instalar y ejecutar (Windows)
         if: runner.os == 'Windows'
@@ -194,12 +209,12 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${VSCE_PAT:-}" ]; then
-            npx --yes @vscode/vsce@3 publish --packagePath dist/alma-lang.vsix -p "$VSCE_PAT"
+            npx --yes @vscode/vsce@3 publish --skip-duplicate --packagePath dist/alma-lang.vsix -p "$VSCE_PAT"
           else
             echo "VSCE_PAT no configurado: no se publica en VS Code Marketplace."
           fi
           if [ -n "${OVSX_PAT:-}" ]; then
-            npx --yes ovsx@0 publish dist/alma-lang.vsix -p "$OVSX_PAT"
+            npx --yes ovsx@0 publish --skip-duplicate dist/alma-lang.vsix -p "$OVSX_PAT"
           else
             echo "OVSX_PAT no configurado: no se publica en Open VSX."
           fi

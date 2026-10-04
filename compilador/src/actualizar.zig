@@ -28,10 +28,18 @@ pub const Resultado = union(enum) {
 
 /// Nombre del binario publicado para la plataforma actual, o null si no hay.
 pub fn nombreBinario() ?[]const u8 {
-    if (builtin.cpu.arch != .x86_64) return null;
-    return switch (builtin.os.tag) {
-        .windows => "alma-windows-x64.exe",
-        .linux => "alma-linux-x64",
+    return nombreBinarioPara(builtin.os.tag, builtin.cpu.arch);
+}
+
+/// Linux ARM64 cubre también Android/Termux: el binario es estático (musl).
+fn nombreBinarioPara(os: std.Target.Os.Tag, arch: std.Target.Cpu.Arch) ?[]const u8 {
+    return switch (os) {
+        .windows => if (arch == .x86_64) "alma-windows-x64.exe" else null,
+        .linux => switch (arch) {
+            .x86_64 => "alma-linux-x64",
+            .aarch64 => "alma-linux-arm64",
+            else => null,
+        },
         else => null,
     };
 }
@@ -147,7 +155,7 @@ fn ultimaEtiqueta(client: *std.http.Client, arena: std.mem.Allocator) ![]const u
 /// Comprueba, descarga, verifica e instala. `arena` es dueña de todo lo devuelto.
 pub fn actualizar(io: std.Io, arena: std.mem.Allocator, version_actual: []const u8, opciones: Opciones) !Resultado {
     const nombre = nombreBinario() orelse {
-        std.debug.print("No se publican binarios de Alma para esta plataforma (solo Windows x64 y Linux x64).\n", .{});
+        std.debug.print("No se publican binarios de Alma para esta plataforma (Windows x64, Linux x64 y Linux ARM64, incluido Android/Termux).\n", .{});
         return error.PlataformaSinBinarios;
     };
     var client: std.http.Client = .{ .allocator = arena, .io = io };
@@ -246,6 +254,15 @@ test "hash esperado: coincidencia exacta del nombre" {
     try std.testing.expectEqualStrings("0000000000000000000000000000000000000000000000000000000000000003", &hashEsperado(sumas, "alma").?);
     try std.testing.expect(hashEsperado(sumas, "alma-macos-x64") == null);
     try std.testing.expect(hashEsperado("xyz  alma", "alma") == null);
+}
+
+test "binario publicado por plataforma" {
+    try std.testing.expectEqualStrings("alma-windows-x64.exe", nombreBinarioPara(.windows, .x86_64).?);
+    try std.testing.expectEqualStrings("alma-linux-x64", nombreBinarioPara(.linux, .x86_64).?);
+    try std.testing.expectEqualStrings("alma-linux-arm64", nombreBinarioPara(.linux, .aarch64).?);
+    try std.testing.expect(nombreBinarioPara(.linux, .arm) == null);
+    try std.testing.expect(nombreBinarioPara(.windows, .aarch64) == null);
+    try std.testing.expect(nombreBinarioPara(.macos, .aarch64) == null);
 }
 
 test "sha256 en hexadecimal" {

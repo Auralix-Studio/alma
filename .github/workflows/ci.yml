@@ -15,7 +15,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # ubuntu-24.04-arm: Linux ARM64, la arquitectura de Android/Termux.
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -31,10 +32,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          case "$RUNNER_OS" in
-            Linux)   plataforma=x86_64-linux ;;
-            Windows) plataforma=x86_64-windows ;;
-            *) echo "Sistema no soportado: $RUNNER_OS" >&2; exit 1 ;;
+          case "$RUNNER_OS/$RUNNER_ARCH" in
+            Linux/X64)     plataforma=x86_64-linux ;;
+            Linux/ARM64)   plataforma=aarch64-linux ;;
+            Windows/X64)   plataforma=x86_64-windows ;;
+            *) echo "Sistema no soportado: $RUNNER_OS/$RUNNER_ARCH" >&2; exit 1 ;;
           esac
           curl -fsSL https://ziglang.org/download/index.json -o "$RUNNER_TEMP/zig-index.json"
           url=$(jq -r --arg v "$ZIG_VERSION" --arg p "$plataforma" '.[$v][$p].tarball' "$RUNNER_TEMP/zig-index.json")
@@ -76,7 +78,9 @@ jobs:
         run: zig build diferencial
         working-directory: ./compilador
 
+      # Las imágenes ARM64 de GitHub no garantizan PowerShell.
       - name: Pruebas de límites
+        if: runner.arch != 'ARM64'
         shell: pwsh
         run: ./pruebas/limites.ps1
         working-directory: ./compilador

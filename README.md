@@ -57,7 +57,7 @@ requiere `zig cc`. Véase el [plan de independencia](docs/planes/PLAN-INDEPENDEN
 irm https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.ps1 | iex
 ```
 
-**Linux x64**:
+**Linux x64 / ARM64, también Android con Termux**:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.sh | sh
