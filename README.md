@@ -1,3 +1,5 @@
+<p align="center"><img src="marca/png/alma-logo-128.png" width="96" alt="Logo de Alma"></p>
+
 # Alma
 
 **Alma** es un lenguaje de programación de propósito general, **en español**, del ecosistema
@@ -43,21 +45,31 @@ fin
 escrito en Alma. Zig sigue siendo la herramienta de construcción inicial.
 `alma compilar archivo.alma --backend=propio` ya genera ejecutables Windows x64
 sin compilador externo para un subconjunto experimental. El backend C, predeterminado,
-requiere `zig cc`. Véase el [plan de independencia](docs/PLAN-INDEPENDENCIA.md).
+requiere `zig cc`. Véase el [plan de independencia](docs/planes/PLAN-INDEPENDENCIA.md).
 
 ---
 
-## Empezar en 30 segundos
+## Instalar
 
-Requiere **[Zig 0.16](https://ziglang.org/download/)** (el compilador de Alma está escrito en Zig).
+**Windows x64** (PowerShell):
 
-```bash
-cd compilador
-zig build                       # compila el binario `alma` en zig-out/bin/
-zig build run -- ejecutar ../ejemplos/factorial.alma
+```powershell
+irm https://github.com/Auralix-Studio/alma/releases/latest/download/instalar.ps1 | iex
 ```
 
-Con el binario `alma` en el PATH podés arrancar un proyecto:
+**Linux x64**:
+
+```sh
+curl -fsSL https://github.com/Auralix-Studio/alma/releases/latest/download/instalar.sh | sh
+```
+
+Los instaladores descargan la última versión, verifican su SHA-256 y la instalan
+para tu usuario (sin permisos de administrador). Más opciones, instalación sin
+conexión y desinstalación: [`distribucion/`](distribucion/README.md). Para colores,
+icono y ejecución con un clic en VS Code, instala la extensión **Alma**
+([`editores/vscode-alma`](editores/vscode-alma/README.md)).
+
+## Empezar en 30 segundos
 
 ```bash
 alma nuevo mi-proyecto
@@ -65,13 +77,18 @@ cd mi-proyecto
 alma ejecutar principal.alma
 ```
 
-O corré la batería de pruebas:
+### Compilar Alma desde el código fuente
+
+Requiere **[Zig 0.16](https://ziglang.org/download/)** (el compilador de Alma está escrito en Zig).
 
 ```bash
+cd compilador
+zig build                       # compila el binario `alma` en zig-out/bin/
+zig build run -- ejecutar ../ejemplos/basicos/factorial.alma
 zig build test                  # pruebas unitarias
+zig build diferencial           # intérprete vs backends nativos
 ```
-
-¿Nuevo en Alma? Leé **[Alma en 5 minutos](docs/tutorial-alma-en-5-minutos.md)**.
+¿Nuevo en Alma? Leé **[Alma en 5 minutos](docs/guias/tutorial-alma-en-5-minutos.md)**.
 
 ---
 
@@ -132,22 +149,32 @@ de cada backend y las pruebas de compilación sin Zig.
 ## Estructura del repositorio
 
 ```
-Alma-Codex/
-├── compilador/            Compilador + CLI, escrito en Zig
-│   └── src/
-│       ├── main.zig       CLI `alma`
-│       ├── modulos.zig    Carga multi-archivo (importar … desde)
-│       ├── paquete.zig    Manifiesto alma.paquete
-│       ├── lexico/        Lexer (tokens)
-│       ├── sintaxis/      Parser + AST
-│       ├── semantica/     Analizador (alma analizar)
-│       └── ejecucion/     Intérprete tree-walking
-├── docs/
-│   ├── especificacion/    Spec del léxico, la gramática, la semántica y los módulos
-│   └── tutorial-alma-en-5-minutos.md
-├── distribucion/          Instaladores (Windows/Linux) + checksums
-├── editores/vscode-alma/  Extensión de VS Code (resaltado)
-└── ejemplos/              Programas .alma de ejemplo
+alma/
+├── compilador/                 Compilador + CLI `alma`, escrito en Zig
+│   ├── src/
+│   │   ├── main.zig            CLI `alma`
+│   │   ├── modulos.zig         Carga multi-archivo (importar … desde)
+│   │   ├── paquete.zig         Manifiesto alma.paquete
+│   │   ├── numeros.zig         Semántica numérica y escapes compartidos
+│   │   ├── ir.zig              Representación intermedia
+│   │   ├── emision_c.zig       Backend C (+ runtime/escalar.h)
+│   │   ├── codegen_pe.zig      Backend propio Windows x64
+│   │   ├── lexico/             Lexer (tokens)
+│   │   ├── sintaxis/           Parser + AST
+│   │   ├── semantica/          Analizador (alma analizar)
+│   │   └── ejecucion/          Intérprete tree-walking + GC
+│   └── pruebas/
+│       ├── diferenciales/      Intérprete vs C vs propio (`zig build diferencial`)
+│       └── *.ps1               Suites CLI, límites, módulos, compilación, propio
+├── docs/                       Ver docs/README.md
+│   ├── especificacion/         Léxico, gramática, semántica, módulos, stdlib, backends
+│   ├── guias/                  Tutorial
+│   ├── planes/                 Independencia, hoja de ruta, autohospedaje, productos
+│   ├── propuestas/             Decisiones de diseño (aprobadas o pendientes)
+│   └── informes/               Auditoría, verificación, estado histórico
+├── ejemplos/                   Programas .alma (básicos, stdlib, modular, aplicaciones)
+├── distribucion/               Instaladores (Windows/Linux) con verificación SHA-256
+└── editores/vscode-alma/       Extensión de VS Code (resaltado)
 ```
 
 Para instalar el binario `alma` en tu sistema, mirá [`distribucion/`](distribucion/README.md).
@@ -156,22 +183,24 @@ Para instalar el binario `alma` en tu sistema, mirá [`distribucion/`](distribuc
 
 | Archivo | Muestra |
 |---|---|
-| [`saludo.alma`](ejemplos/saludo.alma) | Lo mínimo: variables e `imprimir` |
-| [`factorial.alma`](ejemplos/factorial.alma) | Recursión y `mientras` |
-| [`tipos.alma`](ejemplos/tipos.alma) | `estructura` (valor) vs `modelo` (referencia) |
-| [`servidor.alma`](ejemplos/servidor.alma) | `modelo` con métodos |
-| [`diccionario.alma`](ejemplos/diccionario.alma) | Diccionarios y `para` |
-| [`errores.alma`](ejemplos/errores.alma) | `intentar` / `capturar` / `lanzar` |
-| [`async.alma`](ejemplos/async.alma) | `asincrona` / `esperar` / `hilo` |
+| [`saludo.alma`](ejemplos/basicos/saludo.alma) | Lo mínimo: variables e `imprimir` |
+| [`factorial.alma`](ejemplos/basicos/factorial.alma) | Recursión y `mientras` |
+| [`tipos.alma`](ejemplos/basicos/tipos.alma) | `estructura` (valor) vs `modelo` (referencia) |
+| [`servidor.alma`](ejemplos/basicos/servidor.alma) | `modelo` con métodos |
+| [`diccionario.alma`](ejemplos/basicos/diccionario.alma) | Diccionarios y `para` |
+| [`errores.alma`](ejemplos/basicos/errores.alma) | `intentar` / `capturar` / `lanzar` |
+| [`async.alma`](ejemplos/basicos/async.alma) | `asincrona` / `esperar` / `hilo` |
 | [`proyecto-modular/`](ejemplos/proyecto-modular) | Programa en varios archivos (`importar … desde`) |
-| [`stdlib.alma`](ejemplos/stdlib.alma) | Librería estándar: `matematicas`, `cadena`, `sistema`, `json` |
-| [`red.alma`](ejemplos/red.alma) | Llamar a una API JSON real por HTTPS (`red` + `json`) |
+| [`stdlib.alma`](ejemplos/biblioteca-estandar/stdlib.alma) | Librería estándar: `matematicas`, `cadena`, `sistema`, `json` |
+| [`red.alma`](ejemplos/biblioteca-estandar/red.alma) | Llamar a una API JSON real por HTTPS (`red` + `json`) |
+| [`descargador-tiktok/`](ejemplos/aplicaciones/descargador-tiktok) | Aplicación completa: `red`, `json`, diccionarios y errores |
 
 ## Documentación
 
-- [Tutorial — Alma en 5 minutos](docs/tutorial-alma-en-5-minutos.md)
+- [Tutorial — Alma en 5 minutos](docs/guias/tutorial-alma-en-5-minutos.md)
 - [Especificación léxica y tokens](docs/especificacion/01-lexico-y-tokens.md)
 - [Gramática (EBNF)](docs/especificacion/02-gramatica.md)
+- [Índice de toda la documentación](docs/README.md)
 - [El compilador por dentro](compilador/README.md)
 
 ---

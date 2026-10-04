@@ -1,0 +1,26 @@
+// La librería estándar de Alma en acción.
+// Ejecutar con:  alma ejecutar ejemplos/biblioteca-estandar/stdlib.alma
+importar sistema
+importar matematicas
+importar cadena
+importar json
+
+funcion principal()
+    // matematicas
+    imprimir("raiz(2) = " + texto(matematicas.raiz(2.0)))
+    imprimir("PI = " + texto(matematicas.PI))
+
+    // cadena (texto)
+    imprimir("Nombre: " + cadena.mayusculas("auralix"))
+
+    // sistema: escribir y leer un archivo real
+    sistema.escribir_archivo("saludo.txt", "Hola desde Alma")
+    imprimir("Archivo dice: " + sistema.leer_archivo("saludo.txt"))
+    imprimir("¿existe saludo.txt? " + texto(sistema.existe("saludo.txt")))
+
+    // json: serializar y analizar
+    datos = {"lenguaje": "Alma", "version": 1}
+    imprimir("JSON: " + json.serializar(datos))
+    recuperado = json.analizar("{\"x\": 10, \"lista\": [1, 2, 3]}")
+    imprimir("x = " + texto(recuperado["x"]))
+fin

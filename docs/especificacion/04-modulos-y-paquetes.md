@@ -93,7 +93,7 @@ importarlo. Ejecutar el subconjunto compartido en intérprete y C.
 
 ### Validación
 
-`compilador/pruebas-modulos.ps1` verifica estos casos mediante procesos reales.
+`compilador/pruebas/modulos.ps1` verifica estos casos mediante procesos reales.
 Los backends nativos conservan su subconjunto escalar: los inicializadores
 globales (`fijo` incluido), tipos y biblioteca estándar no soportados se
 diagnostican explícitamente. El intérprete sí inicializa las constantes privadas.

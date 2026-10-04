@@ -1,60 +1,85 @@
-# Instalador de Alma para Windows (por usuario, sin admin).
-# Uso: colocá este script junto al binario descargado y ejecutá:
+﻿# Instalador de Alma para Windows x64 (por usuario, sin permisos de administrador).
+#
+# En un comando (descarga la última versión publicada):
+#   irm https://github.com/Auralix-Studio/alma/releases/latest/download/instalar.ps1 | iex
+# Una versión concreta: define $env:ALMA_VERSION = "v0.1.0" antes de ejecutarlo.
+#
+# Sin conexión: coloca este script junto a alma-windows-x64.exe (o alma.exe) y a
+# SHA256SUMS.txt, y ejecuta:
 #   powershell -ExecutionPolicy Bypass -File .\instalar.ps1
-$ErrorActionPreference = "Stop"
+#
+# La instalación se aborta si falta SHA256SUMS.txt, si el binario no figura en él
+# con su nombre exacto o si el hash SHA-256 no coincide.
 
-$destino = Join-Path $env:LOCALAPPDATA "Programs\Alma"
+function Instalar-Alma {
+    $ErrorActionPreference = "Stop"
+    $repositorio = "Auralix-Studio/alma"
+    $destino = Join-Path $env:LOCALAPPDATA "Programs\Alma"
 
-# Busca el binario junto a este script.
-$origen = $null
-$candidatoName = $null
-foreach ($n in @("alma.exe", "alma-windows-x64.exe")) {
-    $candidato = Join-Path $PSScriptRoot $n
-    if (Test-Path $candidato) { $origen = $candidato; $candidatoName = $n; break }
-}
-if (-not $origen) {
-    Write-Error "No encontré 'alma.exe' ni 'alma-windows-x64.exe' junto a este script."
-    exit 1
-}
-
-# La instalación se aborta si falta SHA256SUMS.txt, si el binario no figura en
-# él (coincidencia exacta de nombre) o si el hash no coincide.
-$shaFile = Join-Path $PSScriptRoot "SHA256SUMS.txt"
-if (-not (Test-Path -LiteralPath $shaFile)) {
-    Write-Error "Falta SHA256SUMS.txt junto al binario; no se puede verificar $candidatoName. Abortando."
-    exit 1
-}
-$expectedHash = $null
-foreach ($linea in Get-Content -LiteralPath $shaFile) {
-    $partes = $linea.Trim() -split '\s+', 2
-    if ($partes.Count -eq 2 -and $partes[1].TrimStart('*') -ceq $candidatoName -and $partes[0] -match '^[0-9a-fA-F]{64}$') {
-        $expectedHash = $partes[0].ToLower()
-        break
+    # 1. Origen: binario local junto al script o descarga de GitHub Releases.
+    $carpeta = $PSScriptRoot
+    $origen = $null
+    $nombre = $null
+    if ($carpeta) {
+        foreach ($n in @("alma-windows-x64.exe", "alma.exe")) {
+            $candidato = Join-Path $carpeta $n
+            if (Test-Path -LiteralPath $candidato) { $origen = $candidato; $nombre = $n; break }
+        }
     }
-}
-if (-not $expectedHash) {
-    Write-Error "$candidatoName no figura en SHA256SUMS.txt. Abortando."
-    exit 1
-}
-$actualHash = (Get-FileHash -LiteralPath $origen -Algorithm SHA256).Hash.ToLower()
-if ($actualHash -ne $expectedHash) {
-    Write-Error "El hash SHA256 de $candidatoName no coincide. Abortando instalación."
-    exit 1
-}
-Write-Host "Hash SHA256 verificado: $candidatoName"
+    $temporal = $null
+    if (-not $origen) {
+        if (-not [Environment]::Is64BitOperatingSystem) { throw "Alma solo publica binarios para Windows x64." }
+        $version = if ($env:ALMA_VERSION) { "download/$($env:ALMA_VERSION)" } else { "latest/download" }
+        $base = "https://github.com/$repositorio/releases/$version"
+        $temporal = Join-Path ([IO.Path]::GetTempPath()) ("alma-" + [guid]::NewGuid().ToString("N"))
+        New-Item -ItemType Directory -Path $temporal | Out-Null
+        $nombre = "alma-windows-x64.exe"
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        Write-Host "Descargando $base/$nombre"
+        Invoke-WebRequest -UseBasicParsing -Uri "$base/$nombre" -OutFile (Join-Path $temporal $nombre)
+        Invoke-WebRequest -UseBasicParsing -Uri "$base/SHA256SUMS.txt" -OutFile (Join-Path $temporal "SHA256SUMS.txt")
+        $carpeta = $temporal
+        $origen = Join-Path $temporal $nombre
+    }
 
-New-Item -ItemType Directory -Force -Path $destino | Out-Null
-Copy-Item $origen (Join-Path $destino "alma.exe") -Force
+    try {
+        # 2. Verificación SHA-256 obligatoria.
+        $sumas = Join-Path $carpeta "SHA256SUMS.txt"
+        if (-not (Test-Path -LiteralPath $sumas)) { throw "Falta SHA256SUMS.txt junto al binario; no se puede verificar $nombre." }
+        $esperado = $null
+        foreach ($linea in Get-Content -LiteralPath $sumas) {
+            $partes = $linea.Trim() -split '\s+', 2
+            if ($partes.Count -eq 2 -and $partes[1].TrimStart('*') -ceq $nombre -and $partes[0] -match '^[0-9a-fA-F]{64}$') {
+                $esperado = $partes[0].ToLower()
+                break
+            }
+        }
+        if (-not $esperado) { throw "$nombre no figura en SHA256SUMS.txt." }
+        $obtenido = (Get-FileHash -LiteralPath $origen -Algorithm SHA256).Hash.ToLower()
+        if ($obtenido -ne $esperado) { throw "El hash SHA-256 de $nombre no coincide: no se instala." }
+        Write-Host "Hash SHA-256 verificado: $nombre"
 
-# Agrega la carpeta al PATH del usuario si aún no está.
-$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if ($null -eq $userPath) { $userPath = "" }
-if (($userPath -split ';') -notcontains $destino) {
-    $nuevo = if ($userPath.TrimEnd(';') -eq "") { $destino } else { $userPath.TrimEnd(';') + ";" + $destino }
-    [Environment]::SetEnvironmentVariable("Path", $nuevo, "User")
-    Write-Host "Se agregó '$destino' al PATH del usuario."
+        # 3. Instalación.
+        New-Item -ItemType Directory -Force -Path $destino | Out-Null
+        Copy-Item -LiteralPath $origen -Destination (Join-Path $destino "alma.exe") -Force
+    } finally {
+        if ($temporal) { Remove-Item -LiteralPath $temporal -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+
+    # 4. PATH del usuario (persistente) y de esta sesión.
+    $rutaUsuario = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($null -eq $rutaUsuario) { $rutaUsuario = "" }
+    if (($rutaUsuario -split ';') -notcontains $destino) {
+        $nueva = if ($rutaUsuario.TrimEnd(';') -eq "") { $destino } else { $rutaUsuario.TrimEnd(';') + ";" + $destino }
+        [Environment]::SetEnvironmentVariable("Path", $nueva, "User")
+        Write-Host "Se agregó '$destino' al PATH del usuario."
+    }
+    if (($env:Path -split ';') -notcontains $destino) { $env:Path = $env:Path.TrimEnd(';') + ";" + $destino }
+
+    Write-Host ""
+    Write-Host "Alma instalado en: $destino\alma.exe"
+    & (Join-Path $destino "alma.exe") version
+    Write-Host "Prueba:  alma ejecutar hola.alma   (en otras terminales, ábrelas de nuevo)"
 }
 
-Write-Host ""
-Write-Host "Alma instalado en: $destino\alma.exe"
-Write-Host "Abrí una terminal NUEVA y probá:  alma version"
+Instalar-Alma

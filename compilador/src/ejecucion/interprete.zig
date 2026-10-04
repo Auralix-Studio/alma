@@ -8,7 +8,7 @@
 //! librería estándar. `asincrona`/`esperar`/`hilo` se ejecutan de forma síncrona.
 //!
 //! Memoria: los valores dinámicos viven en un heap con marcado y barrido no móvil
-//! (docs/PROPUESTA-MEMORIA.md, opción b). Solo se recolecta en `puntoSeguro`
+//! (docs/propuestas/PROPUESTA-MEMORIA.md, opción b). Solo se recolecta en `puntoSeguro`
 //! (inicio de sentencia y cabeza de bucle); todo objeto creado o leído durante la
 //! sentencia en curso queda registrado en `raices_temporales` hasta que termina.
 //! La arena solo guarda metadatos inmutables del programa (`TipoDef`).
@@ -106,7 +106,7 @@ fn comoDecimal(v: Valor) ?f64 {
     };
 }
 
-/// Orden exacto entre dos números (docs/PROPUESTA-NUMEROS.md). null si alguno es
+/// Orden exacto entre dos números (docs/propuestas/PROPUESTA-NUMEROS.md). null si alguno es
 /// NaN o si algún operando no es numérico.
 fn ordenNumerico(a: Valor, b: Valor) ?std.math.Order {
     return switch (a) {
@@ -1671,7 +1671,7 @@ const JsonParser = struct {
         if (lex.len == 0) return self.err("número inválido");
         if (!es_dec) {
             if (std.fmt.parseInt(i64, lex, 10)) |n| {
-                // `-0` conserva su signo como decimal (docs/PROPUESTA-NUMEROS.md).
+                // `-0` conserva su signo como decimal (docs/propuestas/PROPUESTA-NUMEROS.md).
                 if (n == 0 and lex[0] == '-') return .{ .decimal = -0.0 };
                 return .{ .entero = n };
             } else |_| {}
@@ -1803,7 +1803,7 @@ fn jsonSerializar(interp: *Interprete, args: []const Valor) ErrorEjec!Valor {
 /// Realiza una petición HTTP y devuelve un diccionario {estado, ok, cuerpo}.
 /// El cuerpo de la respuesta se acota a `interp.limite_red` bytes (StreamTooLong).
 /// La librería std 0.16 no expone un timeout de petición en std.http.Client: ver
-/// docs/PROPUESTA-RED-TLS.md; `limites.red_timeout_ms` queda reservado.
+/// docs/propuestas/PROPUESTA-RED-TLS.md; `limites.red_timeout_ms` queda reservado.
 fn redPeticion(interp: *Interprete, url: []const u8, metodo: std.http.Method, payload: ?[]const u8, extra: []const std.http.Header) ErrorEjec!Valor {
     const io = try ioDe(interp);
     const gpa = interp.arena.child_allocator;
@@ -2667,10 +2667,10 @@ test "GC conserva textos derivados y constructores parcialmente evaluados" {
     try comprobarGc(
         \\importar cadena
         \\funcion mover()
-        \\    i = 0
-        \\    mientras i < 100
-        \\        basura = "x" + texto(i)
-        \\        i = i + 1
+        \\    k = 0
+        \\    mientras k < 100
+        \\        basura = "x" + texto(k)
+        \\        k = k + 1
         \\    fin
         \\    retornar "z"
         \\fin

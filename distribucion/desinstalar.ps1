@@ -1,4 +1,4 @@
-# Desinstalador de Alma para Windows.
+﻿# Desinstalador de Alma para Windows.
 # Uso:  powershell -ExecutionPolicy Bypass -File .\desinstalar.ps1
 $ErrorActionPreference = "Stop"
 

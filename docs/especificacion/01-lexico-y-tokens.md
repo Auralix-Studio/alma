@@ -248,7 +248,7 @@ diagnostica como no soportado. Un NUL dentro de un texto cuenta como un byte;
 impresión, longitud y concatenación deben conservarlo sin truncar el texto.
 JSON usa su propia gramática de escapes: serializar NUL como `\u0000`, nunca
 como `\0`. Aprobar esta propuesta antes de cambiar el comportamiento existente.
-Véase también [la propuesta numérica](../PROPUESTA-NUMEROS.md).
+Véase también [la propuesta numérica](../propuestas/PROPUESTA-NUMEROS.md).
 
 ### 8.4 Lógicos y nulo
 `verdadero` / `falso` (§6.5) · `nulo` 🟡`[PROP]`.

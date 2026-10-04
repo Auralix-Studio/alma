@@ -85,7 +85,7 @@ static void alma_iniciar(void){
 #endif
 }
 static bool es_num(Val v){ return v.tag==T_ENT || v.tag==T_DEC; }
-/* Orden exacto entero/decimal (docs/PROPUESTA-NUMEROS.md): -1, 0, 1, o 2 si d es
+/* Orden exacto entero/decimal (docs/propuestas/PROPUESTA-NUMEROS.md): -1, 0, 1, o 2 si d es
  * NaN. Nunca convierte el entero a double ni un double fuera de rango a entero. */
 static int alma_orden_ent_dec(int64_t i,double d){
     if(d!=d) return 2;

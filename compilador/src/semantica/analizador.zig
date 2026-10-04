@@ -385,7 +385,7 @@ pub const Analizador = struct {
         switch (e.*) {
             .literal_entero => |s| {
                 // El parser ya plegó `-9223372036854775808`; cualquier otra magnitud
-                // fuera de i64 es un error estático (docs/PROPUESTA-NUMEROS.md).
+                // fuera de i64 es un error estático (docs/propuestas/PROPUESTA-NUMEROS.md).
                 if (numeros.valorLiteral(s) == null) try self.err("literal entero fuera del rango de i64: {s}", .{s});
             },
             .literal_decimal, .literal_texto, .literal_bool, .literal_nulo => {},

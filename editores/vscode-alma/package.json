@@ -1,19 +1,41 @@
 {
   "name": "alma-lang",
-  "displayName": "Alma Language",
-  "description": "Resaltado de sintaxis para el lenguaje Alma (ecosistema Auralix).",
-  "version": "0.1.0",
+  "displayName": "Alma",
+  "description": "Lenguaje de programación en español: colores, icono de archivo, fragmentos y ejecución de archivos .alma.",
+  "version": "0.2.0",
   "publisher": "auralix",
+  "license": "MIT",
+  "icon": "iconos/alma-128.png",
+  "galleryBanner": {
+    "color": "#16131F",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Auralix-Studio/alma.git",
+    "directory": "editores/vscode-alma"
+  },
+  "homepage": "https://github.com/Auralix-Studio/alma#readme",
+  "bugs": {
+    "url": "https://github.com/Auralix-Studio/alma/issues"
+  },
   "engines": {
     "vscode": "^1.75.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Snippets"
   ],
   "keywords": [
     "alma",
     "auralix",
-    "español"
+    "español",
+    "spanish",
+    "aprender a programar"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:alma"
   ],
   "contributes": {
     "languages": [
@@ -26,7 +48,11 @@
         "extensions": [
           ".alma"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./iconos/archivo-claro.svg",
+          "dark": "./iconos/archivo-oscuro.svg"
+        }
       }
     ],
     "grammars": [
@@ -34,6 +60,85 @@
         "language": "alma",
         "scopeName": "source.alma",
         "path": "./syntaxes/alma.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "alma",
+        "path": "./fragmentos/alma.code-snippets"
+      }
+    ],
+    "commands": [
+      {
+        "command": "alma.ejecutarArchivo",
+        "title": "Ejecutar archivo",
+        "category": "Alma",
+        "icon": "$(play)"
+      }
+    ],
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "alma.ejecutarArchivo",
+          "when": "resourceLangId == alma",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "alma.ejecutarArchivo",
+          "when": "editorLangId == alma"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "alma.ejecutarArchivo",
+        "key": "ctrl+f5",
+        "mac": "cmd+f5",
+        "when": "editorLangId == alma"
+      }
+    ],
+    "configuration": {
+      "title": "Alma",
+      "properties": {
+        "alma.rutaEjecutable": {
+          "type": "string",
+          "default": "alma",
+          "markdownDescription": "Ruta del ejecutable `alma`. Por defecto se busca `alma` en el `PATH`."
+        }
+      }
+    },
+    "taskDefinitions": [
+      {
+        "type": "alma",
+        "required": [
+          "archivo"
+        ],
+        "properties": {
+          "archivo": {
+            "type": "string",
+            "description": "Archivo .alma que se ejecuta con `alma ejecutar`."
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "alma",
+        "owner": "alma",
+        "source": "alma",
+        "fileLocation": [
+          "autoDetect",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^(.*?):(\\d+):(\\d+):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4
+        }
       }
     ]
   }

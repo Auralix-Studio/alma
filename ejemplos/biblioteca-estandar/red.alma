@@ -1,0 +1,21 @@
+// Alma hablando con una API real por HTTPS.
+// Ejecutar con:  alma ejecutar ejemplos/biblioteca-estandar/red.alma
+importar red
+importar json
+
+funcion principal()
+    imprimir("Consultando una API...")
+    respuesta = red.obtener("https://jsonplaceholder.typicode.com/todos/1")
+
+    si respuesta["ok"]
+        datos = json.analizar(respuesta["cuerpo"])
+        imprimir("Tarea #" + texto(datos["id"]) + ": " + datos["title"])
+        si datos["completed"]
+            imprimir("Estado: completada")
+        sino
+            imprimir("Estado: pendiente")
+        fin
+    sino
+        imprimir("La petición falló con estado " + texto(respuesta["estado"]))
+    fin
+fin

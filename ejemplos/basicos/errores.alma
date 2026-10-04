@@ -1,0 +1,21 @@
+// Manejo de errores en Alma: intentar / capturar / lanzar.
+// Ejecutar con:  alma ejecutar ejemplos/basicos/errores.alma
+importar sistema
+
+funcion dividir(a: entero, b: entero) -> entero
+    si b == 0
+        lanzar error("no se puede dividir entre cero")
+    fin
+    retornar a / b
+fin
+
+funcion principal()
+    intentar
+        imprimir(dividir(10, 2))
+        imprimir(dividir(7, 0))
+        imprimir("esta línea no se ejecuta")
+    capturar (e)
+        imprimir("Error atrapado: " + e.mensaje)
+    fin
+    imprimir("El programa continúa normalmente")
+fin
