@@ -1,5 +1,5 @@
 // Modelo con métodos — como el Servidor de la especificación de Alma.
-// Ejecutar con:  alma ejecutar ejemplos/servidor.alma
+// Ejecutar con:  alma ejecutar ejemplos/basicos/servidor.alma
 importar sistema
 
 modelo Servidor

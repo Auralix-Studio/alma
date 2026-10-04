@@ -1,5 +1,5 @@
 # Las salidas esperadas de las pruebas diferenciales se comparan byte a byte:
 # nunca convertir finales de línea.
-compilador/pruebas-diferenciales/casos/*.salida -text
+compilador/pruebas/diferenciales/casos/*.salida -text
 # Scripts POSIX con LF también en Windows.
 *.sh text eol=lf

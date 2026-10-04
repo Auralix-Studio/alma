@@ -55,8 +55,8 @@ La salida es determinista byte a byte. El formato y ABI internos son experimenta
 
 Lo que el backend propio aún no admite se rechaza antes de escribir el ejecutable,
 sin recurrir al backend C. La ampliación (decimales, memoria dinámica, colecciones,
-objetos, errores) espera la decisión de [memoria nativa](../PROPUESTA-MEMORIA-NATIVA.md);
-Linux, la de [ELF](../PROPUESTA-ELF-LINUX.md).
+objetos, errores) espera la decisión de [memoria nativa](../propuestas/PROPUESTA-MEMORIA-NATIVA.md);
+Linux, la de [ELF](../propuestas/PROPUESTA-ELF-LINUX.md).
 
 ## Representación intermedia
 
@@ -84,11 +84,11 @@ Desde `compilador`, después de construir Alma:
 
 ```powershell
 zig build test
-./pruebas-cli.ps1
-./pruebas-propio.ps1
+./pruebas/cli.ps1
+./pruebas/propio.ps1
 ```
 
-`zig build diferencial` ejecuta `pruebas-diferenciales/casos` con el intérprete, el
+`zig build diferencial` ejecuta `pruebas/diferenciales/casos` con el intérprete, el
 backend C y, en Windows x64, el backend propio, y compara stdout byte a byte y el
 código de salida (ver la cabecera de `diferencial.zig`).
 

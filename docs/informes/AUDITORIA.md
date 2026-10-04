@@ -64,10 +64,10 @@ motores), **M** medio (malas prácticas, rendimiento, mantenibilidad), **B** baj
 |---|---|---|---|---|---|---|
 | R1 | C | Inyección de cabeceras y aborto del proceso | `interprete.zig:1683` | Nombres/valores con CR/LF o `:` pasaban a `std.http`, que los `assert`a | Validación previa | `68c48a8` |
 | R2 | A | Respuesta de red sin tope | `interprete.zig:1660` | `Writer.Allocating` sin límite; `limites.red_respuesta` sin uso | `allocRemaining(.limited)` | `68c48a8` |
-| R3 | A | Sin timeout de red | `interprete.zig:1645-1661` | `std.http.Client` 0.16 no lo expone | Propuesta en [PROPUESTA-RED-TLS.md](PROPUESTA-RED-TLS.md) | **Pendiente** |
+| R3 | A | Sin timeout de red | `interprete.zig:1645-1661` | `std.http.Client` 0.16 no lo expone | Propuesta en [PROPUESTA-RED-TLS.md](../propuestas/PROPUESTA-RED-TLS.md) | **Pendiente** |
 | R4 | M | `page_allocator` en release | `main.zig:40` | Una página por objeto pequeño | `smp_allocator` | `68c48a8` |
 | R5 | M | Topes de lectura no configurables | `limites.zig` | Constantes | `--limite-lectura`, `--limite-red` | `68c48a8` |
-| R6 | A | URL sin codificar en el cuerpo POST | `alma/principal.alma:107` | Concatenación directa de `region` | `red.codificar_url` | `68c48a8` |
+| R6 | A | URL sin codificar en el cuerpo POST | `ejemplos/aplicaciones/descargador-tiktok/principal.alma:107` | Concatenación directa de `region` | `red.codificar_url` | `68c48a8` |
 | R7 | C | `alma nuevo` sobrescribe archivos del usuario | `main.zig:412-460` | `writeFile` sin comprobar existencia | Comprobación previa de los tres archivos | `12a09a6` |
 | R8 | B | `sistema.escribir_archivo` escribe cualquier ruta | `sisEscribirArchivo` | Diseño sin sandbox | Documentado; sin cambio | Aceptado |
 
@@ -82,8 +82,8 @@ motores), **M** medio (malas prácticas, rendimiento, mantenibilidad), **B** baj
 | P5 | M | Rutinas de error sin UNWIND_INFO | `codegen_pe.zig:530` | Se saltaba (`jmp`) fuera de cualquier rango de `.pdata` | Rutinas llamadas, con prólogo y `.pdata` | `fa097db` |
 | P6 | M | Sin ASLR | `codegen_pe.zig:620,635` | `RELOCS_STRIPPED`, sin `DYNAMIC_BASE` | Flags + bloque de reubicación de relleno | `fa097db` |
 | P7 | B | `unreachable` dependientes de `validar` | `codegen_pe.zig:273,329` | — | Errores explícitos | `fa097db` |
-| P8 | A | Cobertura: sin decimales, `texto()`, concatenación, colecciones, objetos, errores, async, stdlib | `codegen_pe.zig:162,188,217` | Falta runtime con memoria dinámica | [PROPUESTA-MEMORIA-NATIVA.md](PROPUESTA-MEMORIA-NATIVA.md) | **Decisión pendiente** |
-| P9 | M | Solo Windows x64 | — | Sin emisor ELF | [PROPUESTA-ELF-LINUX.md](PROPUESTA-ELF-LINUX.md) | **Decisión pendiente** |
+| P8 | A | Cobertura: sin decimales, `texto()`, concatenación, colecciones, objetos, errores, async, stdlib | `codegen_pe.zig:162,188,217` | Falta runtime con memoria dinámica | [PROPUESTA-MEMORIA-NATIVA.md](../propuestas/PROPUESTA-MEMORIA-NATIVA.md) | **Decisión pendiente** |
+| P9 | M | Solo Windows x64 | — | Sin emisor ELF | [PROPUESTA-ELF-LINUX.md](../propuestas/PROPUESTA-ELF-LINUX.md) | **Decisión pendiente** |
 | P10 | B | Diagnósticos de error sin archivo/línea | rutinas de error | Sin tabla de posiciones | Tabla de posiciones por llamada | Pendiente |
 
 ### 2.5 Repositorio, pruebas, CI y distribución
@@ -95,8 +95,8 @@ motores), **M** medio (malas prácticas, rendimiento, mantenibilidad), **B** baj
 | D3 | M | `SHA256SUMS.txt` listaba binarios no versionados | `distribucion/SHA256SUMS.txt` | Retirado; `generar-sumas.sh` por versión | `ef966e1` |
 | D4 | A | CI: Linux solo con pruebas unitarias; sin diferenciales; `setup-zig` sin garantía para 0.16 | `.github/workflows/ci.yml` | Zig 0.16.0 verificado por SHA-256; diferenciales y límites en ambos sistemas; ReleaseSafe | `31e349b` |
 | D5 | M | Pruebas de `ir.zig`, `emision_c.zig`, `modulos.zig` no registradas | `src/pruebas.zig` | Registradas | `5b0a5a5` |
-| D6 | M | Sin pruebas diferenciales | — | `pruebas-diferenciales/` + `zig build diferencial` | `984a674` |
-| D7 | B | Pruebas CLI comentadas (archivo de origen en errores de módulos, compilar sin Zig) | `pruebas-cli.ps1` (final) | Revisar y reactivar o eliminar | Pendiente |
+| D6 | M | Sin pruebas diferenciales | — | `pruebas/diferenciales/` + `zig build diferencial` | `984a674` |
+| D7 | B | Pruebas CLI comentadas (archivo de origen en errores de módulos, compilar sin Zig) | `pruebas/cli.ps1` (final) | Revisar y reactivar o eliminar | Pendiente |
 | D8 | B | `desinstalar.ps1` borra la carpeta completa de instalación | `distribucion/desinstalar.ps1` | Borrar solo `alma.exe` | Pendiente |
 | D9 | B | `.alma` y scripts con CRLF/LF mezclados (`core.autocrlf`) | `.gitattributes` | `-text` para `.salida`, `eol=lf` para `.sh` | `984a674` |
 
@@ -129,4 +129,4 @@ motores), **M** medio (malas prácticas, rendimiento, mantenibilidad), **B** baj
 - Escrituras que sobrescriben: R7; `compilar` ya protegía la salida con
   `--sobrescribir` y la comprobación de fuentes.
 - Determinismo: el backend propio genera bytes idénticos (prueba unitaria y
-  `pruebas-propio.ps1`); el backend C depende de `zig cc`.
+  `pruebas/propio.ps1`); el backend C depende de `zig cc`.

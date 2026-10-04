@@ -78,21 +78,21 @@ jobs:
 
       - name: Pruebas de límites
         shell: pwsh
-        run: ./pruebas-limites.ps1
+        run: ./pruebas/limites.ps1
         working-directory: ./compilador
 
       - name: Pruebas CLI, módulos y compilación (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          ./pruebas-cli.ps1
-          ./pruebas-modulos.ps1
-          ./pruebas-compilar.ps1
+          ./pruebas/cli.ps1
+          ./pruebas/modulos.ps1
+          ./pruebas/compilar.ps1
         working-directory: ./compilador
 
       # El script vacía PATH durante la compilación y ejecución: Zig no está disponible.
       - name: Backend propio sin Zig en PATH (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./pruebas-propio.ps1
+        run: ./pruebas/propio.ps1
         working-directory: ./compilador

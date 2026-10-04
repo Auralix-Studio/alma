@@ -1,5 +1,5 @@
 // La librería estándar de Alma en acción.
-// Ejecutar con:  alma ejecutar ejemplos/stdlib.alma
+// Ejecutar con:  alma ejecutar ejemplos/biblioteca-estandar/stdlib.alma
 importar sistema
 importar matematicas
 importar cadena

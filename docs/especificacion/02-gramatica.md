@@ -14,7 +14,7 @@ Notación de líneas: `NL` = `nueva_linea`, `IND` = `sangria`, `DED` = `desangri
 Límite aprobado: 64 niveles activos combinados de bloques y expresiones anidadas,
 y altura máxima 64 para cada AST de expresión (hoja = 1). El nivel siguiente
 produce error de sintaxis con posición. Los niveles internos de precedencia no
-cuentan. Véase [el contrato de límites](../PROPUESTA-LIMITES.md) para el conteo.
+cuentan. Véase [el contrato de límites](../propuestas/PROPUESTA-LIMITES.md) para el conteo.
 
 ---
 
@@ -143,7 +143,7 @@ literal con campos nombrados `Punto{ x: 1, y: 2 }`.)*
 
 **Métodos de `modelo`** ✅: dentro de un método, los nombres de campo resuelven a la
 instancia (**self implícito**: `host = h` asigna el campo), y `yo` es el self explícito
-(`yo.host`). Ejemplo funcionando: `ejemplos/servidor.alma`.
+(`yo.host`). Ejemplo funcionando: `ejemplos/basicos/servidor.alma`.
 
 **Ya funcionan:** `intentar`/`capturar`/`lanzar` (errores) y `asincrona`/`esperar`/`hilo`
 (async). En el intérprete, async se resuelve de forma **cooperativa/síncrona**: una función

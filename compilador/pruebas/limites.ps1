@@ -1,10 +1,10 @@
 ﻿param(
-    [string]$Alma = (Join-Path $PSScriptRoot ('zig-out/bin/alma' + $(if ([Environment]::OSVersion.Platform -eq 'Win32NT') { '.exe' } else { '' }))),
+    [string]$Alma = (Join-Path $PSScriptRoot ('../zig-out/bin/alma' + $(if ([Environment]::OSVersion.Platform -eq 'Win32NT') { '.exe' } else { '' }))),
     [string]$Seccion = 'todo'
 )
 $ErrorActionPreference = 'Stop'
 $Alma = (Resolve-Path -LiteralPath $Alma).Path
-$casos = Join-Path $PSScriptRoot '.zig-cache/pruebas-limites'
+$casos = Join-Path $PSScriptRoot '../.zig-cache/pruebas-limites'
 [void][IO.Directory]::CreateDirectory($casos)
 $script:comprobaciones = 0
 # Nombre del ejecutable que produce `alma compilar` para un fuente (sin .exe fuera de Windows).

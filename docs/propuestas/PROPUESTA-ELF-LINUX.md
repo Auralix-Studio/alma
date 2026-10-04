@@ -1,7 +1,7 @@
 # Backend propio para Linux x86-64 (ELF) — decisión pendiente
 
 Fecha: 2026-10-03. Propuesta; **no implementada**. Etapa D3 de la
-[hoja de ruta](HOJA-DE-RUTA.md).
+[hoja de ruta](../planes/HOJA-DE-RUTA.md).
 
 ## Objetivo
 

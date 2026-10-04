@@ -1,7 +1,7 @@
 # Alma: camino a un compilador independiente
 
 Actualizado: 2026-10-03. Este documento distingue implementación de objetivos.
-Estado actual, hallazgos y orden de trabajo: [AUDITORIA.md](AUDITORIA.md) y
+Estado actual, hallazgos y orden de trabajo: [AUDITORIA.md](../informes/AUDITORIA.md) y
 [HOJA-DE-RUTA.md](HOJA-DE-RUTA.md). Nivel de independencia: **1 parcial** (backend
 propio sin herramientas externas solo para el subconjunto escalar en Windows x64).
 
@@ -26,7 +26,7 @@ arquitectura requiere soporte explícito; no se promete compatibilidad universal
 - Una ejecución fallida conserva la salida acumulada antes del error.
 - Las comparaciones entre dos enteros `i64` no pasan por `f64` en ninguno de los
   dos motores. (Desde 2026-10-03 las mixtas entero/decimal también son exactas.)
-- `pruebas-cli.ps1` comprueba procesos reales, módulos y concordancia de resultados.
+- `pruebas/cli.ps1` comprueba procesos reales, módulos y concordancia de resultados.
 
 Por defecto `alma compilar` utiliza `zig cc`. Ya existe un generador propio experimental
 con `alma compilar archivo.alma --backend=propio`, descrito en la especificación 07.
@@ -110,7 +110,7 @@ consumen esa IR. El backend C retiene/libera textos dinámicos; el backend propi
 código máquina x64 y PE32+ sin herramientas externas para un subconjunto escalar.
 Se añadió `alma ir`, diagnóstico de archivo de origen en módulos y verificaciones
 de memoria. El detalle y los límites están en
-[IR y backend propio](especificacion/07-ir-y-backend-propio.md).
+[IR y backend propio](../especificacion/07-ir-y-backend-propio.md).
 
 ## Verificación local (Windows)
 
@@ -120,13 +120,13 @@ Con Zig 0.16 accesible en el PATH, desde `compilador`:
 zig build test
 zig build
 zig build diferencial
-./pruebas-limites.ps1
-./pruebas-cli.ps1
-./pruebas-propio.ps1
+./pruebas/limites.ps1
+./pruebas/cli.ps1
+./pruebas/propio.ps1
 ```
 
 Los resultados de la última verificación están en
-[INFORME-ENDURECIMIENTO.md](INFORME-ENDURECIMIENTO.md).
+[INFORME-ENDURECIMIENTO.md](../informes/INFORME-ENDURECIMIENTO.md).
 
 Las pruebas CLI conservan sus casos generados bajo `.zig-cache/pruebas-cli` para
 inspección. No requieren red ni modifican instalaciones del usuario.

@@ -20,7 +20,7 @@ Resaltado de sintaxis para el lenguaje **Alma** (ecosistema Auralix): colorea ar
 **Modo desarrollo (recomendado):**
 1. Abre la carpeta `editores/vscode-alma` en VS Code.
 2. Presiona `F5` para lanzar un *Extension Development Host*.
-3. En la nueva ventana, abre cualquier archivo `.alma` (p. ej. `ejemplos/factorial.alma`).
+3. En la nueva ventana, abre cualquier archivo `.alma` (p. ej. `ejemplos/basicos/factorial.alma`).
 
 **Instalación manual:**
 Copia esta carpeta a tu directorio de extensiones de VS Code y recarga:

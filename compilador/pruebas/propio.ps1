@@ -1,7 +1,7 @@
-﻿param([string]$Alma = (Join-Path $PSScriptRoot 'zig-out/bin/alma.exe'))
+﻿param([string]$Alma = (Join-Path $PSScriptRoot '../zig-out/bin/alma.exe'))
 $ErrorActionPreference = 'Stop'
 $Alma = (Resolve-Path -LiteralPath $Alma).Path
-$casos = Join-Path $PSScriptRoot ('.zig-cache/pruebas-propio/' + [guid]::NewGuid().ToString('N'))
+$casos = Join-Path $PSScriptRoot ('../.zig-cache/pruebas-propio/' + [guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($casos)
 $script:cuenta = 0
 function Comprobar([bool]$Condicion, [string]$Mensaje) {

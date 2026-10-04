@@ -52,7 +52,7 @@ medición. No se promete inmunidad ante cualquier agotamiento de stack.
    capturar el error. Parser: comprobar archivo:línea:columna en el CLI.
 
 Las cuatro correcciones se entregaron por separado, con regresiones fallidas
-antes y pasadas después. Véase [el informe de verificación](INFORME-ENDURECIMIENTO.md).
+antes y pasadas después. Véase [el informe de verificación](../informes/INFORME-ENDURECIMIENTO.md).
 
 ## Decisión recibida
 

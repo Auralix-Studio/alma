@@ -1,7 +1,7 @@
 # Hoja de ruta hacia la independencia de Alma
 
 Fecha: 2026-10-03. Complementa [PLAN-INDEPENDENCIA.md](PLAN-INDEPENDENCIA.md)
-(objetivos) y [AUDITORIA.md](AUDITORIA.md) (hallazgos). Orden: primero lo que
+(objetivos) y [AUDITORIA.md](../informes/AUDITORIA.md) (hallazgos). Orden: primero lo que
 hace inutilizable el lenguaje, luego la semántica común, luego las pruebas que
 la fijan, luego el backend propio por etapas y al final el autohospedaje.
 Ninguna etapa añade dependencias externas.
@@ -24,7 +24,7 @@ Ninguna etapa añade dependencias externas.
 
 ## Fase C — Pruebas diferenciales como contrato (hecho)
 
-`compilador/pruebas-diferenciales` + `zig build diferencial`, en CI Linux y
+`compilador/pruebas/diferenciales` + `zig build diferencial`, en CI Linux y
 Windows. Criterio de aceptación de cualquier cambio de backend: el caso declara
 el motor en `// motores:` y produce los mismos bytes y código de salida. Ampliar
 la batería es obligatorio antes de declarar soportada una construcción.
@@ -33,16 +33,16 @@ la batería es obligatorio antes de declarar soportada una construcción.
 
 | Etapa | Contenido | Depende de | Criterio de aceptación | Riesgo |
 |---|---|---|---|---|
-| D1 (hecho) | Ranuras reutilizadas, marcos hasta 128 KiB, límite de 64 llamadas, búfer de salida, literales únicos, UNWIND_INFO en todo el código, ASLR, determinismo, sin `unreachable` | C | `pruebas-propio.ps1` sin Zig en PATH; casos diferenciales con `propio` | ASLR depende del cargador de Windows: se comprueba ejecutando |
-| D2a | Decimales (SSE2): literales, aritmética, comparación exacta, `imprimir` con el formato canónico | Decisión sobre la rutina de formato (ver [PROPUESTA-MEMORIA-NATIVA.md](PROPUESTA-MEMORIA-NATIVA.md) §4) | `decimales-formato` y `comparaciones-mixtas` con `propio` | El formateador shortest en código máquina es la pieza de mayor riesgo |
+| D1 (hecho) | Ranuras reutilizadas, marcos hasta 128 KiB, límite de 64 llamadas, búfer de salida, literales únicos, UNWIND_INFO en todo el código, ASLR, determinismo, sin `unreachable` | C | `pruebas/propio.ps1` sin Zig en PATH; casos diferenciales con `propio` | ASLR depende del cargador de Windows: se comprueba ejecutando |
+| D2a | Decimales (SSE2): literales, aritmética, comparación exacta, `imprimir` con el formato canónico | Decisión sobre la rutina de formato (ver [PROPUESTA-MEMORIA-NATIVA.md](../propuestas/PROPUESTA-MEMORIA-NATIVA.md) §4) | `decimales-formato` y `comparaciones-mixtas` con `propio` | El formateador shortest en código máquina es la pieza de mayor riesgo |
 | D2b | Heap y textos dinámicos: `texto()`, concatenación | **Decisión de modelo de memoria** | `texto-concatenacion` con `propio`; sin fugas medidas con un contador como `ALMA_VERIFICAR_MEMORIA` | Elegir mal el modelo obliga a reescribir D2c–D2e |
 | D2c | Listas y diccionarios | D2b | `colecciones` con `propio` | Ciclos si el modelo es RC |
 | D2d | `estructura`/`modelo`, métodos | D2c | `errores-modelo` sin la parte de errores | — |
 | D2e | `intentar/capturar/lanzar` | D2d | `errores-modelo` con `propio` | Interacción con unwind: preferir retorno de error explícito a SEH |
 | D2f | `asincrona`/`esperar`/`hilo` (síncronos, como el intérprete) | D2e | `async` diferencial | — |
 | D2g | stdlib: `matematicas`, `cadena`, `json`, `sistema` | D2c | Casos diferenciales por módulo | `sistema` necesita más importaciones de kernel32 |
-| D3 | ELF x86-64 para Linux con syscalls directos | **Decisión** ([PROPUESTA-ELF-LINUX.md](PROPUESTA-ELF-LINUX.md)) | Todos los casos `propio` también en Linux en CI | Dos ABIs que mantener |
-| D4 | `red` con TLS | **Decisión** ([PROPUESTA-RED-TLS.md](PROPUESTA-RED-TLS.md)) | Pruebas contra servidor local | Superficie criptográfica |
+| D3 | ELF x86-64 para Linux con syscalls directos | **Decisión** ([PROPUESTA-ELF-LINUX.md](../propuestas/PROPUESTA-ELF-LINUX.md)) | Todos los casos `propio` también en Linux en CI | Dos ABIs que mantener |
+| D4 | `red` con TLS | **Decisión** ([PROPUESTA-RED-TLS.md](../propuestas/PROPUESTA-RED-TLS.md)) | Pruebas contra servidor local | Superficie criptográfica |
 
 Regla para todas las etapas: sin fallback silencioso a C. Lo no soportado se
 rechaza en `validar()` con un mensaje explícito antes de escribir el ejecutable.

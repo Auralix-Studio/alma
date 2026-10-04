@@ -1,7 +1,7 @@
 # Estado del proyecto Alma — documento de traspaso
 
 > Snapshot histórico de julio de 2026. Para los cambios del 2 de octubre y la dirección
-> vigente, consultar [PLAN-INDEPENDENCIA.md](PLAN-INDEPENDENCIA.md). Las rutas,
+> vigente, consultar [PLAN-INDEPENDENCIA.md](../planes/PLAN-INDEPENDENCIA.md). Las rutas,
 > cantidades de pruebas y propuestas de backend siguientes pueden estar desactualizadas.
 
 Snapshot completo para retomar el trabajo en cualquier sesión nueva. **Todo el código,
@@ -30,7 +30,7 @@ está en curso. El compilador de Alma está escrito en **Zig 0.16**.
   ```
   zig build test        # ≈80 tests, todos en verde
   zig build             # produce compilador/zig-out/bin/alma.exe
-  zig build run -- ejecutar ../ejemplos/factorial.alma
+  zig build run -- ejecutar ../ejemplos/basicos/factorial.alma
   ```
 - Binarios de release (autocontenidos, sin dependencias):
   ```

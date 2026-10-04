@@ -1,4 +1,4 @@
-// Factoriales en Alma — ejecutar con:  alma ejecutar ejemplos/factorial.alma
+// Factoriales en Alma — ejecutar con:  alma ejecutar ejemplos/basicos/factorial.alma
 importar sistema
 
 funcion factorial(n: entero) -> entero

@@ -1,5 +1,5 @@
 // Colecciones y tipos en Alma: valor (estructura) vs referencia (modelo).
-// Ejecutar con:  alma ejecutar ejemplos/tipos.alma
+// Ejecutar con:  alma ejecutar ejemplos/basicos/tipos.alma
 importar sistema
 
 estructura Punto

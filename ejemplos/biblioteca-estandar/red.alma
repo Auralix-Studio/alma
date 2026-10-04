@@ -1,5 +1,5 @@
 // Alma hablando con una API real por HTTPS.
-// Ejecutar con:  alma ejecutar ejemplos/red.alma
+// Ejecutar con:  alma ejecutar ejemplos/biblioteca-estandar/red.alma
 importar red
 importar json
 

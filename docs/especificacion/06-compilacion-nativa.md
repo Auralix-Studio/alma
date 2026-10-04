@@ -43,13 +43,13 @@ Listas, diccionarios, `estructura`/`modelo`, `para`, llamadas a la librería est
 `alma ejecutar`.
 
 ## Verificado
-`alma compilar ejemplos/factorial.alma` produce un `.exe` nativo que imprime los factoriales;
+`alma compilar ejemplos/basicos/factorial.alma` produce un `.exe` nativo que imprime los factoriales;
 `saludo.alma` compila la concatenación de texto. Ambos corren sin `alma` ni `zig`.
 
 ## Roadmap
 Backend propio sin compiladores externos, runtime con gestión de memoria y compilación
 de la biblioteca estándar. Después se buscará el autohospedaje. El plan vigente y sus
-criterios de aceptación están en [PLAN-INDEPENDENCIA.md](../PLAN-INDEPENDENCIA.md).
+criterios de aceptación están en [PLAN-INDEPENDENCIA.md](../planes/PLAN-INDEPENDENCIA.md).
 
 ## Errores y limitaciones
 Los errores detectados devuelven código 1. Si falta Zig se conserva el C generado.

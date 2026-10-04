@@ -1,6 +1,6 @@
 //! numeros.zig — Semántica numérica y de escapes compartida por los motores.
 //!
-//! Contrato: docs/PROPUESTA-NUMEROS.md. El runtime C (runtime/escalar.h) implementa
+//! Contrato: docs/propuestas/PROPUESTA-NUMEROS.md. El runtime C (runtime/escalar.h) implementa
 //! el mismo contrato en C; las pruebas diferenciales comparan ambos con el intérprete.
 
 const std = @import("std");

@@ -69,7 +69,7 @@ sustitutos, convertidos a UTF-8); otro escape es `JSON inválido`. Un número si
 punto ni exponente se lee como entero si cabe en i64 (`-0` se lee como decimal
 para conservar su signo). `serializar` escapa los bytes de control como `\u00XX`,
 escribe los decimales con el formato canónico de
-[la propuesta numérica](../PROPUESTA-NUMEROS.md) y rechaza `nan`/`inf`.
+[la propuesta numérica](../propuestas/PROPUESTA-NUMEROS.md) y rechaza `nan`/`inf`.
 
 ## `red` (cliente HTTP/HTTPS)
 | Miembro | Descripción |
@@ -87,7 +87,7 @@ con `json.analizar(respuesta["cuerpo"])`.
 Límites: el cuerpo de la respuesta se acota a 50 MB (`--limite-red=BYTES`); superarlo
 es un error capturable. Nombres de cabecera vacíos o con `:`, y nombres o valores con
 CR/LF, se rechazan (evita inyección de cabeceras). **No hay timeout** todavía: ver
-[la propuesta de red](../PROPUESTA-RED-TLS.md). `codificar_url(texto)` codifica todo
+[la propuesta de red](../propuestas/PROPUESTA-RED-TLS.md). `codificar_url(texto)` codifica todo
 byte fuera de `A-Z a-z 0-9 - _ . ~` como `%XX`.
 
 ## Representación de módulos

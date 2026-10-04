@@ -1,5 +1,5 @@
 // Manejo de errores en Alma: intentar / capturar / lanzar.
-// Ejecutar con:  alma ejecutar ejemplos/errores.alma
+// Ejecutar con:  alma ejecutar ejemplos/basicos/errores.alma
 importar sistema
 
 funcion dividir(a: entero, b: entero) -> entero

@@ -1,5 +1,5 @@
 // Diccionarios en Alma.
-// Ejecutar con:  alma ejecutar ejemplos/diccionario.alma
+// Ejecutar con:  alma ejecutar ejemplos/basicos/diccionario.alma
 importar sistema
 
 funcion principal()

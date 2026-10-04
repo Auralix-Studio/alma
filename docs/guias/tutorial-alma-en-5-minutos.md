@@ -251,5 +251,5 @@ alma ast    mi_programa.alma    # el árbol de sintaxis
 ---
 
 ¡Eso es Alma! Para más detalle, mirá la
-[especificación](especificacion/01-lexico-y-tokens.md) y la
-[gramática](especificacion/02-gramatica.md).
+[especificación](../especificacion/01-lexico-y-tokens.md) y la
+[gramática](../especificacion/02-gramatica.md).

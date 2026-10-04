@@ -6,7 +6,7 @@ Front-end del compilador del lenguaje **Alma** (ecosistema Auralix).
 `alma ejecutar archivo.alma` corre programas de verdad: funciones, listas y diccionarios + `para`,
 `estructura` (valor) vs `modelo` (referencia) con **métodos**, **manejo de errores** (`intentar`/`capturar`/`lanzar`),
 **async** (`asincrona`/`esperar`/`hilo`), **análisis semántico** (`alma analizar`) y
-**módulos multi-archivo** + paquetes. Léxico híbrido (indentación + `fin`). Pruebas unitarias con `zig build test` y pruebas del CLI con `./pruebas-cli.ps1`.
+**módulos multi-archivo** + paquetes. Léxico híbrido (indentación + `fin`). Pruebas unitarias con `zig build test` y pruebas del CLI con `./pruebas/cli.ps1`.
 
 ## Requisitos
 - **Zig 0.16.x**. Descarga: <https://ziglang.org/download/>
@@ -46,7 +46,7 @@ zig build
 
 Ejecutar un programa Alma (vía `zig build run`, con `--` para pasar argumentos):
 ```
-zig build run -- ejecutar ../ejemplos/factorial.alma
+zig build run -- ejecutar ../ejemplos/basicos/factorial.alma
 ```
 
 ### CLI `alma`
@@ -69,6 +69,6 @@ Pendientes (oficiales): `formatear`, `probar`, `doc`, `lsp`.
 
 ## Desarrollo hacia la independencia
 
-El plan vigente está en [PLAN-INDEPENDENCIA.md](../docs/PLAN-INDEPENDENCIA.md).
+El plan vigente está en [PLAN-INDEPENDENCIA.md](../docs/planes/PLAN-INDEPENDENCIA.md).
 La compilación nativa carga módulos Alma y valida el programa antes de generar C.
 El backend C requiere Zig; el backend propio experimental Windows x64 se selecciona con --backend=propio y no invoca herramientas externas. El autohospedaje sigue pendiente.

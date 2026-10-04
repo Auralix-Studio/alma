@@ -27,7 +27,7 @@ Alma no tiene o no compila de forma nativa:
 | Argumentos de línea de comandos | **No existe** | `alma compilar <archivo>` |
 
 Cada requisito nuevo del lenguaje necesita propuesta y aprobación (regla de
-especificación) y casos en `pruebas-diferenciales/`.
+especificación) y casos en `pruebas/diferenciales/`.
 
 ## Requisitos previos del backend
 

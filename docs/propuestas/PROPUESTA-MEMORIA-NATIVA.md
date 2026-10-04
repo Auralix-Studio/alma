@@ -1,7 +1,7 @@
 # Memoria y runtime del backend propio — decisión pendiente
 
 Fecha: 2026-10-03. Propuesta; **no implementa nada**. Bloquea las etapas D2a–D2g
-de la [hoja de ruta](HOJA-DE-RUTA.md): textos dinámicos, colecciones, objetos,
+de la [hoja de ruta](../planes/HOJA-DE-RUTA.md): textos dinámicos, colecciones, objetos,
 errores y biblioteca estándar en el backend propio.
 
 ## Punto de partida (código actual)
