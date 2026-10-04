@@ -156,3 +156,7 @@ if ($IsWindows) {
     Comprobar ($r.Codigo -eq 0 -and $r.Salida -eq "42`n") "Identidad de archivo Windows: $($r.Error)"
 }
 Write-Output "$script:cuenta comprobaciones de módulos correctas."
+
+# Los fallos lanzan una excepción antes; un comando nativo que falló a propósito
+# no debe filtrarse como código de salida ($LASTEXITCODE) del script.
+exit 0

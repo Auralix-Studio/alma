@@ -81,3 +81,6 @@ foreach ($extras in @(@('-o'), @('--desconocido'), @('--backend=propio', '--cons
 }
 Write-Output "$script:cuenta comprobaciones de compilación segura correctas."
 
+# Los fallos lanzan una excepción antes; un comando nativo que falló a propósito
+# no debe filtrarse como código de salida ($LASTEXITCODE) del script.
+exit 0

@@ -160,3 +160,7 @@ fin
     Comprobar ($r.Codigo -ne 0 -and $r.Error.Contains('decimales')) 'Falta rechazo de decimales'
 } finally { $env:PATH = $pathOriginal }
 Write-Output "$script:cuenta comprobaciones del backend propio correctas, sin Zig en PATH."
+
+# Los fallos lanzan una excepción antes; un comando nativo que falló a propósito
+# no debe filtrarse como código de salida ($LASTEXITCODE) del script.
+exit 0

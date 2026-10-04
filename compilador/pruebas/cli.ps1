@@ -279,3 +279,7 @@ try {
 } finally { Pop-Location }
 
 Write-Output "$script:comprobaciones comprobaciones CLI correctas."
+
+# Los fallos lanzan una excepción antes; un comando nativo que falló a propósito
+# no debe filtrarse como código de salida ($LASTEXITCODE) del script.
+exit 0
