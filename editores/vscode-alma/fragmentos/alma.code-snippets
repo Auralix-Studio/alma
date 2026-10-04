@@ -1,0 +1,52 @@
+{
+  "Programa principal": {
+    "prefix": "principal",
+    "body": ["funcion principal()", "\t${1:imprimir(\"Hola, Alma\")}", "fin"],
+    "description": "Punto de entrada del programa"
+  },
+  "Función": {
+    "prefix": "funcion",
+    "body": ["funcion ${1:nombre}(${2:parametro}: ${3:entero}) -> ${4:entero}", "\t$0", "fin"],
+    "description": "Declaración de función"
+  },
+  "Si": {
+    "prefix": "si",
+    "body": ["si ${1:condicion}", "\t$0", "fin"],
+    "description": "Condicional"
+  },
+  "Si / sino": {
+    "prefix": "sisino",
+    "body": ["si ${1:condicion}", "\t$2", "sino", "\t$0", "fin"],
+    "description": "Condicional con alternativa"
+  },
+  "Mientras": {
+    "prefix": "mientras",
+    "body": ["mientras ${1:condicion}", "\t$0", "fin"],
+    "description": "Bucle mientras se cumpla la condición"
+  },
+  "Para": {
+    "prefix": "para",
+    "body": ["para ${1:elemento} en ${2:rango(10)}", "\t$0", "fin"],
+    "description": "Recorrer una lista, un diccionario o un rango"
+  },
+  "Estructura": {
+    "prefix": "estructura",
+    "body": ["estructura ${1:Nombre}", "\t${2:campo}: ${3:entero}", "fin"],
+    "description": "Tipo por valor (se copia)"
+  },
+  "Modelo": {
+    "prefix": "modelo",
+    "body": ["modelo ${1:Nombre}", "\t${2:campo}: ${3:entero}", "", "\tfuncion ${4:metodo}()", "\t\t$0", "\tfin", "fin"],
+    "description": "Tipo por referencia con métodos"
+  },
+  "Intentar / capturar": {
+    "prefix": "intentar",
+    "body": ["intentar", "\t$1", "capturar (${2:e})", "\timprimir(${2:e}.mensaje)", "fin"],
+    "description": "Manejo de errores"
+  },
+  "Importar módulo": {
+    "prefix": "importar",
+    "body": ["importar ${1:nombre} desde \"${2:modulo}\""],
+    "description": "Importar un símbolo exportado por otro archivo"
+  }
+}

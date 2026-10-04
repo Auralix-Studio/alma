@@ -152,7 +152,7 @@
     },
     "modules": {
       "name": "support.class.module.alma",
-      "match": "\b(matematicas|cadena|sistema|json|red)\b(?=s*.)"
+      "match": "\\b(matematicas|cadena|sistema|json|red)\\b(?=\\s*\\.)"
     },
     "builtins": {
       "name": "support.function.builtin.alma",
