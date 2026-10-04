@@ -1,0 +1,165 @@
+name: Publicar versión
+
+# Se dispara al subir una etiqueta vX.Y.Z (o vX.Y.Z-rc.N para versiones de prueba).
+on:
+  push:
+    tags: [ "v*" ]
+
+permissions:
+  contents: read
+
+env:
+  ZIG_VERSION: 0.16.0
+
+jobs:
+  construir:
+    name: Construir binarios y extensión
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Zig ${{ env.ZIG_VERSION }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://ziglang.org/download/index.json -o "$RUNNER_TEMP/zig-index.json"
+          url=$(jq -r --arg v "$ZIG_VERSION" '.[$v]["x86_64-linux"].tarball' "$RUNNER_TEMP/zig-index.json")
+          sha=$(jq -r --arg v "$ZIG_VERSION" '.[$v]["x86_64-linux"].shasum' "$RUNNER_TEMP/zig-index.json")
+          curl -fsSL "$url" -o "$RUNNER_TEMP/zig.tar.xz"
+          echo "$sha  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Comprobar que la etiqueta coincide con la versión de alma
+        shell: bash
+        run: |
+          version=$(sed -n 's/^const VERSION = "\(.*\)";/\1/p' compilador/src/main.zig)
+          base="${GITHUB_REF_NAME#v}"; base="${base%%-*}"
+          if [ "$version" != "$base" ]; then
+            echo "La etiqueta $GITHUB_REF_NAME no coincide con VERSION = \"$version\" en main.zig" >&2
+            exit 1
+          fi
+
+      - name: Pruebas unitarias
+        run: zig build test --summary all
+        working-directory: ./compilador
+
+      # Cada destino se compila dos veces desde cachés vacías y se compara byte a
+      # byte: la versión publicada debe ser reproducible.
+      - name: Compilar Windows x64 y Linux x64 (reproducible)
+        shell: bash
+        working-directory: ./compilador
+        run: |
+          set -euo pipefail
+          mkdir -p ../dist
+          compilar() { # destino, binario, nombre publicado
+            for i in 1 2; do
+              rm -rf .zig-cache zig-global
+              ZIG_GLOBAL_CACHE_DIR="$PWD/zig-global" zig build -Dtarget="$1" -Doptimize=ReleaseSafe --prefix "salida-$i"
+            done
+            cmp "salida-1/bin/$2" "salida-2/bin/$2"
+            cp "salida-1/bin/$2" "../dist/$3"
+            rm -rf salida-1 salida-2
+          }
+          compilar x86_64-windows-gnu alma.exe alma-windows-x64.exe
+          compilar x86_64-linux-musl alma alma-linux-x64
+          chmod +x ../dist/alma-linux-x64
+
+      - name: Sumas SHA-256 e instaladores
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh distribucion/generar-sumas.sh dist
+          cp distribucion/instalar.sh distribucion/instalar.ps1 distribucion/desinstalar.sh distribucion/desinstalar.ps1 dist/
+
+      - name: Empaquetar la extensión
+        shell: bash
+        working-directory: ./editores/vscode-alma
+        run: npx --yes @vscode/vsce@3 package --out ../../dist/alma-lang.vsix
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  probar:
+    name: Probar instalación (${{ matrix.os }})
+    needs: construir
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Instalar y ejecutar (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x dist/alma-linux-x64
+          sh dist/instalar.sh
+          "$HOME/.local/bin/alma" version
+          "$HOME/.local/bin/alma" ejecutar ejemplos/basicos/factorial.alma
+
+      - name: Instalar y ejecutar (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./dist/instalar.ps1
+          $alma = Join-Path $env:LOCALAPPDATA 'Programs\Alma\alma.exe'
+          & $alma version
+          & $alma ejecutar ejemplos/basicos/factorial.alma
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  publicar:
+    name: Publicar en GitHub Releases y tiendas
+    needs: probar
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Crear la versión en GitHub
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prueba=""
+          case "$GITHUB_REF_NAME" in *-*) prueba="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" --title "Alma $GITHUB_REF_NAME" --generate-notes $prueba
+
+      # Solo en versiones definitivas y si los tokens están configurados como
+      # secretos del repositorio (VSCE_PAT y OVSX_PAT).
+      - name: Publicar la extensión
+        if: ${{ !contains(github.ref_name, '-') }}
+        shell: bash
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -n "${VSCE_PAT:-}" ]; then
+            npx --yes @vscode/vsce@3 publish --packagePath dist/alma-lang.vsix -p "$VSCE_PAT"
+          else
+            echo "VSCE_PAT no configurado: no se publica en VS Code Marketplace."
+          fi
+          if [ -n "${OVSX_PAT:-}" ]; then
+            npx --yes ovsx@0 publish dist/alma-lang.vsix -p "$OVSX_PAT"
+          else
+            echo "OVSX_PAT no configurado: no se publica en Open VSX."
+          fi
