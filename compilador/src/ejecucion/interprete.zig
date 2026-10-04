@@ -2667,10 +2667,10 @@ test "GC conserva textos derivados y constructores parcialmente evaluados" {
     try comprobarGc(
         \\importar cadena
         \\funcion mover()
-        \\    i = 0
-        \\    mientras i < 100
-        \\        basura = "x" + texto(i)
-        \\        i = i + 1
+        \\    k = 0
+        \\    mientras k < 100
+        \\        basura = "x" + texto(k)
+        \\        k = k + 1
         \\    fin
         \\    retornar "z"
         \\fin
