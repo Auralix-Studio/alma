@@ -1,7 +1,7 @@
 # Publicación de Alma: CLI, extensión de editor y marca
 
-Fecha: 2026-10-03. Estado: **definición propuesta; pendiente de las decisiones de
-la §5**. Objetivo: que cualquiera pueda instalar `alma` y usar `alma ejecutar`
+Fecha: 2026-10-03, actualizado 2026-10-04. Estado: **decisiones tomadas (§5);
+pasos 1–3 de la §6 implementados**, pendiente la primera versión. Objetivo: que cualquiera pueda instalar `alma` y usar `alma ejecutar`
 con un comando, ver los archivos `.alma` coloreados y con su icono en el editor, y
 reconocer la marca. Es el requisito previo de la
 [app de aprendizaje](APP-APRENDIZAJE.md).
@@ -144,25 +144,25 @@ diseño final conviene encargarlo o refinarlo con un diseñador.
 La misma marca se usa en el icono de la extensión, el icono de archivo `.alma`,
 el sitio, el README y la app de aprendizaje.
 
-## 5. Decisiones que necesito
+## 5. Decisiones tomadas (2026-10-03)
 
-1. **Logo:** A, B, C, o encargar uno.
-2. **Plataformas de la primera versión:** las cinco de §2.1, o empezar por
-   Windows y Linux x64.
-3. **Tiendas de la extensión:** VS Code Marketplace y Open VSX (recomendado).
-   Hay que crear el editor `auralix` y los tokens; eso tienes que hacerlo tú con
-   tus cuentas.
-4. **Firma de código:** sin firma al principio (recomendado) o firmar desde la
-   primera versión.
-5. **Número de la primera versión:** `v0.1.0`.
+1. **Logo:** concepto A, llama (`marca/`).
+2. **Plataformas de la primera versión:** Windows x64 y Linux x64. macOS y ARM
+   quedan para después; los instaladores lo indican.
+3. **Tiendas de la extensión:** VS Code Marketplace y Open VSX. Requiere crear
+   el editor `auralix` en ambas y guardar los tokens como secretos `VSCE_PAT` y
+   `OVSX_PAT` del repositorio (con tus cuentas).
+4. **Firma de código:** sin firma al principio.
+5. **Primera versión:** `v0.1.0`, precedida de `v0.1.0-rc.1` para probar el flujo.
 
-## 6. Orden de trabajo una vez decidido
+## 6. Orden de trabajo
 
-1. Flujo `release.yml` y los instaladores en modo descarga, probados con una
-   versión de prueba (`v0.1.0-rc.1`).
-2. Extensión 0.2 (gramática, fragmentos, comando de ejecución, problem matcher)
-   y su publicación en el mismo flujo.
-3. Logo e iconos en `marca/`, integrados en la extensión y el README.
+1. **Hecho:** `.github/workflows/release.yml` (pruebas, binarios reproducibles,
+   sumas, prueba de instaladores en Windows y Linux, GitHub Releases, tiendas) e
+   instaladores en modo descarga. Falta ejecutarlo con `v0.1.0-rc.1`.
+2. **Hecho:** extensión 0.2 (gramática, icono, fragmentos, comando de
+   ejecución, problem matcher); `vsce package` la empaqueta sin avisos.
+3. **Hecho:** logo, paleta e iconos en `marca/`, en la extensión y el README.
 4. Página de instalación en GitHub Pages.
 5. Gestores de paquetes (winget, Homebrew).
 6. Luego, fase 0 de la app de aprendizaje: `alma.wasm`.

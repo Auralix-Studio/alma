@@ -1,3 +1,5 @@
+<p align="center"><img src="marca/png/alma-logo-128.png" width="96" alt="Logo de Alma"></p>
+
 # Alma
 
 **Alma** es un lenguaje de programación de propósito general, **en español**, del ecosistema
@@ -47,17 +49,27 @@ requiere `zig cc`. Véase el [plan de independencia](docs/planes/PLAN-INDEPENDEN
 
 ---
 
-## Empezar en 30 segundos
+## Instalar
 
-Requiere **[Zig 0.16](https://ziglang.org/download/)** (el compilador de Alma está escrito en Zig).
+**Windows x64** (PowerShell):
 
-```bash
-cd compilador
-zig build                       # compila el binario `alma` en zig-out/bin/
-zig build run -- ejecutar ../ejemplos/basicos/factorial.alma
+```powershell
+irm https://github.com/Auralix-Studio/alma/releases/latest/download/instalar.ps1 | iex
 ```
 
-Con el binario `alma` en el PATH podés arrancar un proyecto:
+**Linux x64**:
+
+```sh
+curl -fsSL https://github.com/Auralix-Studio/alma/releases/latest/download/instalar.sh | sh
+```
+
+Los instaladores descargan la última versión, verifican su SHA-256 y la instalan
+para tu usuario (sin permisos de administrador). Más opciones, instalación sin
+conexión y desinstalación: [`distribucion/`](distribucion/README.md). Para colores,
+icono y ejecución con un clic en VS Code, instala la extensión **Alma**
+([`editores/vscode-alma`](editores/vscode-alma/README.md)).
+
+## Empezar en 30 segundos
 
 ```bash
 alma nuevo mi-proyecto
@@ -65,12 +77,17 @@ cd mi-proyecto
 alma ejecutar principal.alma
 ```
 
-O corré la batería de pruebas:
+### Compilar Alma desde el código fuente
+
+Requiere **[Zig 0.16](https://ziglang.org/download/)** (el compilador de Alma está escrito en Zig).
 
 ```bash
+cd compilador
+zig build                       # compila el binario `alma` en zig-out/bin/
+zig build run -- ejecutar ../ejemplos/basicos/factorial.alma
 zig build test                  # pruebas unitarias
+zig build diferencial           # intérprete vs backends nativos
 ```
-
 ¿Nuevo en Alma? Leé **[Alma en 5 minutos](docs/guias/tutorial-alma-en-5-minutos.md)**.
 
 ---
