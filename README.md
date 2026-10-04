@@ -54,13 +54,13 @@ requiere `zig cc`. Véase el [plan de independencia](docs/planes/PLAN-INDEPENDEN
 **Windows x64** (PowerShell):
 
 ```powershell
-irm https://github.com/Auralix-Studio/alma/releases/latest/download/instalar.ps1 | iex
+irm https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.ps1 | iex
 ```
 
 **Linux x64**:
 
 ```sh
-curl -fsSL https://github.com/Auralix-Studio/alma/releases/latest/download/instalar.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.sh | sh
 ```
 
 Los instaladores descargan la última versión, verifican su SHA-256 y la instalan

@@ -13,7 +13,7 @@ dependencias). macOS y ARM están previstos más adelante.
 **Windows** (PowerShell, sin permisos de administrador):
 
 ```powershell
-irm https://github.com/Auralix-Studio/alma/releases/latest/download/instalar.ps1 | iex
+irm https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.ps1 | iex
 ```
 
 Instala en `%LOCALAPPDATA%\Programs\Alma\alma.exe` y lo agrega al `PATH` del usuario.
@@ -21,7 +21,7 @@ Instala en `%LOCALAPPDATA%\Programs\Alma\alma.exe` y lo agrega al `PATH` del usu
 **Linux:**
 
 ```sh
-curl -fsSL https://github.com/Auralix-Studio/alma/releases/latest/download/instalar.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.sh | sh
 ```
 
 Instala en `~/.local/bin/alma`.
@@ -36,12 +36,17 @@ alma ejecutar hola.alma
 ### Una versión concreta
 
 ```powershell
-$env:ALMA_VERSION = "v0.1.0"; irm https://github.com/Auralix-Studio/alma/releases/download/v0.1.0/instalar.ps1 | iex
+$env:ALMA_VERSION = "v0.1.0"; irm https://raw.githubusercontent.com/Auralix-Studio/alma/v0.1.0/distribucion/instalar.ps1 | iex
 ```
 
 ```sh
-curl -fsSL https://github.com/Auralix-Studio/alma/releases/download/v0.1.0/instalar.sh | ALMA_VERSION=v0.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/Auralix-Studio/alma/v0.1.0/distribucion/instalar.sh | ALMA_VERSION=v0.1.0 sh
 ```
+
+El script de instalación se sirve desde el repositorio (`raw.githubusercontent.com`,
+como texto UTF-8): GitHub Releases lo entrega como binario y PowerShell 5.1 lo
+leería como Latin-1, corrompiendo acentos y símbolos. El script, a su vez,
+descarga el binario y las sumas de GitHub Releases.
 
 ## Verificación de integridad (siempre)
 

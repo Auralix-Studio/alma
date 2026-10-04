@@ -197,14 +197,30 @@ fn reemplazarEjecutable(io: std.Io, arena: std.mem.Allocator, binario: []const u
             error.FileNotFound => {},
             else => return err,
         };
-        try cwd.rename(actual, cwd, anterior, io);
-        cwd.rename(nuevo, cwd, actual, io) catch |err| {
+        // std.Io.Dir.rename devuelve FileBusy con el .exe en ejecución;
+        // MoveFileExW sí puede renombrar la imagen en uso.
+        try moverWindows(arena, actual, anterior);
+        moverWindows(arena, nuevo, actual) catch |err| {
             // Deja el ejecutable original en su sitio si el segundo paso falla.
-            cwd.rename(anterior, cwd, actual, io) catch {};
+            moverWindows(arena, anterior, actual) catch {};
             return err;
         };
     } else {
         try cwd.rename(nuevo, cwd, actual, io);
+    }
+}
+
+extern "kernel32" fn MoveFileExW(existente: [*:0]const u16, nuevo: ?[*:0]const u16, banderas: u32) callconv(.winapi) i32;
+extern "kernel32" fn GetLastError() callconv(.winapi) u32;
+
+fn moverWindows(arena: std.mem.Allocator, desde: []const u8, hacia: []const u8) !void {
+    const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
+    const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
+    const a = try std.unicode.wtf8ToWtf16LeAllocZ(arena, desde);
+    const b = try std.unicode.wtf8ToWtf16LeAllocZ(arena, hacia);
+    if (MoveFileExW(a.ptr, b.ptr, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) == 0) {
+        std.debug.print("No se pudo mover '{s}' a '{s}' (error de Windows {d}).\n", .{ desde, hacia, GetLastError() });
+        return error.NoSePudoReemplazar;
     }
 }
 
