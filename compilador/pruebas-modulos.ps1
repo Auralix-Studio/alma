@@ -1,4 +1,4 @@
-param([string]$Alma = (Join-Path $PSScriptRoot 'zig-out/bin/alma.exe'))
+﻿param([string]$Alma = (Join-Path $PSScriptRoot 'zig-out/bin/alma.exe'))
 $ErrorActionPreference = 'Stop'
 $Alma = (Resolve-Path -LiteralPath $Alma).Path
 $casos = Join-Path $PSScriptRoot ('.zig-cache/pruebas-modulos/' + [guid]::NewGuid().ToString('N'))
@@ -18,7 +18,8 @@ function Ejecutar([string]$Binario, [string[]]$Argumentos) {
     $info.RedirectStandardError = $true
     $info.StandardOutputEncoding = [Text.Encoding]::UTF8
     $info.StandardErrorEncoding = [Text.Encoding]::UTF8
-    foreach ($arg in $Argumentos) { [void]$info.ArgumentList.Add($arg) }
+    if ($null -ne $info.ArgumentList) { foreach ($arg in $Argumentos) { [void]$info.ArgumentList.Add($arg) } }
+    else { $info.Arguments = ($Argumentos | ForEach-Object { if ($_ -match '[\s"]') { '"' + $_.Replace('"', '\"') + '"' } else { $_ } }) -join ' ' }
     $p = [Diagnostics.Process]::Start($info)
     try {
         $out = $p.StandardOutput.ReadToEndAsync()
@@ -93,7 +94,7 @@ fin
 $r = Ejecutar $Alma @('ejecutar', $aislado)
 Comprobar ($r.Codigo -eq 0 -and $r.Salida -eq "10 20 99`n") "Aislamiento: $($r.Error)"
 foreach ($backend in @('c', 'propio')) {
-    $r = Ejecutar $Alma @('compilar', $aislado, "--backend=$backend")
+    $r = Ejecutar $Alma @('compilar', $aislado, "--backend=$backend", '--sobrescribir')
     Comprobar ($r.Codigo -eq 0) "Compilar $backend : $($r.Error)"
     $r = Ejecutar ([IO.Path]::ChangeExtension($aislado, '.exe')) @()
     Comprobar ($r.Codigo -eq 0 -and $r.Salida -eq "10 20 99`n") "Aislamiento $backend : $($r.Error) $($r.Salida)"

@@ -1,4 +1,4 @@
-param([string]$Alma = (Join-Path $PSScriptRoot 'zig-out/bin/alma.exe'))
+﻿param([string]$Alma = (Join-Path $PSScriptRoot 'zig-out/bin/alma.exe'))
 $ErrorActionPreference = 'Stop'
 $Alma = (Resolve-Path -LiteralPath $Alma).Path
 $casos = Join-Path $PSScriptRoot ('.zig-cache/pruebas-propio/' + [guid]::NewGuid().ToString('N'))
@@ -127,6 +127,7 @@ funcion bajar(n: entero) -> entero
     fin
     retornar bajar(n - 1)
 fin
+
 '@
     [void](Probar 'limite-llamadas-frontera' ($recursion + "funcion principal()`n    imprimir(bajar(62))`nfin`n") '42')
     [void](Probar 'limite-llamadas' ($recursion + "funcion principal()`n    imprimir(`"antes`")`n    imprimir(bajar(63))`nfin`n") 'desbordamiento de pila' 1)

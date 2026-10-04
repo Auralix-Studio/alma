@@ -1,4 +1,4 @@
-# Instalador de Alma para Windows (por usuario, sin admin).
+﻿# Instalador de Alma para Windows (por usuario, sin admin).
 # Uso: colocá este script junto al binario descargado y ejecutá:
 #   powershell -ExecutionPolicy Bypass -File .\instalar.ps1
 $ErrorActionPreference = "Stop"

@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$Alma = (Join-Path $PSScriptRoot ('zig-out/bin/alma' + $(if ([Environment]::OSVersion.Platform -eq 'Win32NT') { '.exe' } else { '' }))),
     [string]$Seccion = 'todo'
 )
@@ -30,7 +30,8 @@ function Ejecutar([string]$Binario, [string[]]$Argumentos) {
     $inicio.RedirectStandardError = $true
     $inicio.StandardOutputEncoding = [Text.Encoding]::UTF8
     $inicio.StandardErrorEncoding = [Text.Encoding]::UTF8
-    foreach ($arg in $Argumentos) { [void]$inicio.ArgumentList.Add($arg) }
+    if ($null -ne $inicio.ArgumentList) { foreach ($arg in $Argumentos) { [void]$inicio.ArgumentList.Add($arg) } }
+    else { $inicio.Arguments = ($Argumentos | ForEach-Object { if ($_ -match '[\s"]') { '"' + $_.Replace('"', '\"') + '"' } else { $_ } }) -join ' ' }
     $proceso = [Diagnostics.Process]::Start($inicio)
     try {
         $salida = $proceso.StandardOutput.ReadToEndAsync()

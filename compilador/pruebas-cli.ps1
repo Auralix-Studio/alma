@@ -1,4 +1,4 @@
-param([string]$Alma = (Join-Path $PSScriptRoot 'zig-out/bin/alma.exe'))
+﻿param([string]$Alma = (Join-Path $PSScriptRoot 'zig-out/bin/alma.exe'))
 $ErrorActionPreference = 'Stop'
 $Alma = (Resolve-Path -LiteralPath $Alma).Path
 $casos = Join-Path $PSScriptRoot ('.zig-cache/pruebas-cli/' + [guid]::NewGuid().ToString('N'))
@@ -234,12 +234,12 @@ ProbarErrorRuntime 'resta-overflow' "    a = -9223372036854775807 - 1`n    impri
 ProbarErrorRuntime 'producto-overflow' "    a = 9223372036854775807`n    imprimir(a * 2)" 'desbordamiento'
 ProbarErrorRuntime 'division-overflow' "    a = -9223372036854775807 - 1`n    imprimir(a / -1)" 'desbordamiento'
 ProbarErrorRuntime 'negacion-overflow' "    a = -9223372036854775807 - 1`n    imprimir(-a)" 'desbordamiento'
-# Prueba de parseo de literal overflow (falla en compilador/intérprete)
+# Un literal fuera de i64 es un error estático del analizador (docs/PROPUESTA-NUMEROS.md).
 $parseOverflow = Guardar 'parse-overflow.alma' "funcion principal()`n    a = 9223372036854775808`n    imprimir(a)`nfin`n"
 $r = Invocar @('ejecutar', $parseOverflow)
-Comprobar ($r.Codigo -ne 0 -and $r.Texto -match 'desbordamiento') "Parse overflow en intérprete falló: $($r.Texto)"
+Comprobar ($r.Codigo -ne 0 -and $r.Texto -match 'fuera del rango de i64') "Parse overflow en intérprete falló: $($r.Texto)"
 $r = Invocar @('compilar', $parseOverflow)
-Comprobar ($r.Codigo -ne 0 -and $r.Texto -match 'desbordamiento') "Parse overflow en compilación falló: $($r.Texto)"
+Comprobar ($r.Codigo -ne 0 -and $r.Texto -match 'fuera del rango de i64') "Parse overflow en compilación falló: $($r.Texto)"
 ProbarErrorRuntime 'variable-no-inicializada' "    si falso`n        a = 1`n    fin`n    imprimir(a)" 'variable no definida'
 # [void](Guardar 'modulo-error.alma' "exportar funcion fallar()`n    imprimir(1 / 0)`nfin`n")
 # $entradaError = Guardar 'entrada-error.alma' "importar fallar desde `"modulo-error`"`nfuncion principal()`n    fallar()`nfin`n"

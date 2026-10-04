@@ -1,4 +1,4 @@
-param([string]$Alma = (Join-Path $PSScriptRoot 'zig-out/bin/alma.exe'))
+﻿param([string]$Alma = (Join-Path $PSScriptRoot 'zig-out/bin/alma.exe'))
 $ErrorActionPreference = 'Stop'
 $Alma = (Resolve-Path -LiteralPath $Alma).Path
 $casos = Join-Path $PSScriptRoot ('.zig-cache/pruebas-compilar/' + [guid]::NewGuid().ToString('N'))
@@ -18,7 +18,8 @@ function Ejecutar([string]$Binario, [string[]]$Argumentos) {
     $info.RedirectStandardError = $true
     $info.StandardOutputEncoding = [Text.Encoding]::UTF8
     $info.StandardErrorEncoding = [Text.Encoding]::UTF8
-    foreach ($arg in $Argumentos) { [void]$info.ArgumentList.Add($arg) }
+    if ($null -ne $info.ArgumentList) { foreach ($arg in $Argumentos) { [void]$info.ArgumentList.Add($arg) } }
+    else { $info.Arguments = ($Argumentos | ForEach-Object { if ($_ -match '[\s"]') { '"' + $_.Replace('"', '\"') + '"' } else { $_ } }) -join ' ' }
     $p = [Diagnostics.Process]::Start($info)
     try {
         $out = $p.StandardOutput.ReadToEndAsync()
