@@ -1,0 +1,13 @@
+{
+  "name": "alma-web",
+  "version": "0.1.0",
+  "description": "Portal oficial, documentación y laboratorio de ingeniería del lenguaje Alma",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/test-sitio.mjs",
+    "serve": "python -m http.server 8000"
+  },
+  "author": "Auralix Studio",
+  "license": "MIT"
+}

@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alma — Lenguaje de Programación en Español</title>
+  <meta name="description" content="Alma es un lenguaje de programación de propósito general en español, con compilador nativo propio x86_64 PE, tipado gradual y control de memoria explícito por valor y referencia.">
+  <link rel="icon" type="image/svg+xml" href="assets/marca/alma-icono-app.svg">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ======================================================================
+       BARRA DE NAVEGACIÓN SUPERIOR (INGENIERÍA Y TELEMETRÍA)
+       ====================================================================== -->
+  <header class="header-nav">
+    <div class="nav-container">
+      <a href="#" class="brand-link" data-goto="inicio">
+        <img src="assets/marca/alma-logo.svg" alt="Alma" class="brand-logo-img">
+        <span>Alma</span>
+        <div class="brand-telemetry">
+          <span class="status-dot status-dot-active"></span>
+          <span>v0.1 &bull; x86_64</span>
+        </div>
+      </a>
+
+      <ul class="nav-links" id="navLinks">
+        <li>
+          <button class="nav-tab-btn active" data-view="inicio">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+            <span>Inicio</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-tab-btn" data-view="docs">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><path d="M6 6h10"></path><path d="M6 10h10"></path></svg>
+            <span>Documentación</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-tab-btn" data-view="playground">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+            <span>Playground</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-tab-btn" data-view="juegos">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><path d="M6 12h4"></path><path d="M8 10v4"></path><circle cx="17" cy="10" r=".5" fill="currentColor"></circle><circle cx="15" cy="13" r=".5" fill="currentColor"></circle></svg>
+            <span>Laboratorio</span>
+          </button>
+        </li>
+      </ul>
+
+      <div class="nav-right-actions">
+        <div class="telemetry-badge" id="navXpDisplay" data-goto="juegos" title="Telemetría de Progreso">
+          <span class="status-dot status-dot-amber"></span>
+          <span>XP: 0 &bull; NIVEL 1</span>
+        </div>
+        <a href="https://github.com/Auralix-Studio/alma" target="_blank" rel="noopener noreferrer" class="btn-github">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======================================================================
+       VISTA 1: INICIO (HERO TÉCNICO Y ARQUITECTURA)
+       ====================================================================== -->
+  <main class="view-section active" id="view-inicio">
+    <section class="hero-grid">
+      <div>
+        <div class="hero-tag">
+          <span class="status-dot status-dot-amber"></span>
+          <span>Ecosistema Auralix &bull; Arquitectura de Compilación</span>
+        </div>
+        <h1 class="hero-title">
+          Ingeniería de sistemas <br>
+          <span class="hero-title-gradient">sin la barrera del inglés.</span>
+        </h1>
+        <p class="hero-description">
+          Alma es un lenguaje de propósito general con tipado gradual, semántica de memoria explícita (copia por valor vs. alias por referencia), representación intermedia (IR) y generación directa de binarios ejecutables Windows x86-64 sin dependencias externas.
+        </p>
+
+        <div class="hero-actions">
+          <button class="btn-primary" data-goto="playground">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <span>Ejecutar en Navegador</span>
+          </button>
+          <button class="btn-amber" data-goto="juegos">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+            <span>Laboratorio Interactivo</span>
+          </button>
+          <button class="btn-secondary" data-goto="docs">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line><line x1="10" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="14" y2="21"></line></svg>
+            <span>Especificación Técnica</span>
+          </button>
+        </div>
+
+        <!-- Terminal Installer -->
+        <div class="terminal-installer">
+          <div class="installer-tabs">
+            <button class="installer-tab-btn active" data-os="win">Windows x64 (PowerShell)</button>
+            <button class="installer-tab-btn" data-os="linux">Linux x64 / ARM64</button>
+            <button class="installer-tab-btn" data-os="termux">Android (Termux)</button>
+          </div>
+          <div class="installer-command-row">
+            <span id="installCommandText">irm https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.ps1 | iex</span>
+            <button class="btn-copy" data-copy-target="installCommandText">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copiar</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Diagrama de Flujo Arquitectónico -->
+      <div class="architecture-schematic">
+        <div class="schematic-header">
+          <span>Cadena de Compilación de Alma</span>
+          <span>ESTRUCTURA DE SUB-SISTEMAS</span>
+        </div>
+
+        <div class="pipeline-flow">
+          <div class="pipeline-node">
+            <div class="pipeline-node-left">
+              <span class="pipeline-node-index">01</span>
+              <div>
+                <div class="pipeline-node-name">Léxico y Sintaxis (AST)</div>
+                <div class="pipeline-node-desc">Off-side rule, tokens Unicode, ast.Pos</div>
+              </div>
+            </div>
+            <span class="tech-badge tech-badge-violet">ZIG 0.16</span>
+          </div>
+
+          <div class="pipeline-connector"></div>
+
+          <div class="pipeline-node">
+            <div class="pipeline-node-left">
+              <span class="pipeline-node-index">02</span>
+              <div>
+                <div class="pipeline-node-name">Análisis Semántico</div>
+                <div class="pipeline-node-desc">Tipado gradual, resolución de ámbitos, linter</div>
+              </div>
+            </div>
+            <span class="tech-badge tech-badge-violet">ESTÁTICO</span>
+          </div>
+
+          <div class="pipeline-connector"></div>
+
+          <div class="pipeline-node">
+            <div class="pipeline-node-left">
+              <span class="pipeline-node-index">03</span>
+              <div>
+                <div class="pipeline-node-name">Representación Intermedia (IR)</div>
+                <div class="pipeline-node-desc">Instrucciones linealizadas, control de flujo</div>
+              </div>
+            </div>
+            <span class="tech-badge tech-badge-amber">IR PROPIO</span>
+          </div>
+
+          <div class="pipeline-connector"></div>
+
+          <div class="pipeline-node">
+            <div class="pipeline-node-left">
+              <span class="pipeline-node-index">04</span>
+              <div>
+                <div class="pipeline-node-name">Generación PE/COFF x86-64</div>
+                <div class="pipeline-node-desc">Emisión binaria de código máquina sin linker externo</div>
+              </div>
+            </div>
+            <span class="tech-badge tech-badge-amber">NATIVO DIRECTO</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Comparativa de Memoria: Estructura vs Modelo -->
+    <section class="memory-comparison-section">
+      <div class="section-label">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+        <span>Semántica de Memoria</span>
+      </div>
+      <h2 class="section-title">Valor frente a Referencia</h2>
+      <p class="section-subtitle">
+        Eliminación de efectos secundarios imprevistos mediante contratos semánticos explícitos en tiempo de diseño:
+      </p>
+
+      <div class="comparison-grid">
+        <div class="code-spec-card">
+          <div class="code-spec-header">
+            <span>estructura &bull; Semántica por Valor</span>
+            <span class="tech-badge tech-badge-violet">COPIA EN STACK</span>
+          </div>
+          <pre class="code-pre"><code class="language-alma">estructura Vector3D
+    x: decimal
+    y: decimal
+    z: decimal
+fin
+
+funcion principal()
+    a = Vector3D(1.0, 2.0, 3.0)
+    b = a            // 'estructura' realiza copia profunda
+    b.x = 99.0
+    imprimir(a.x)    // 1.0  — 'a' permanece invariante
+fin</code></pre>
+        </div>
+
+        <div class="code-spec-card">
+          <div class="code-spec-header">
+            <span>modelo &bull; Semántica por Referencia</span>
+            <span class="tech-badge tech-badge-amber">PUNTERO COMPARTIDO</span>
+          </div>
+          <pre class="code-pre"><code class="language-alma">modelo Contador
+    total: entero
+
+    funcion incrementar()
+        total = total + 1
+    fin
+fin
+
+funcion principal()
+    c = Contador(0)
+    d = c            // 'modelo' comparte la misma instancia
+    d.incrementar()
+    imprimir(c.total)  // 1  — 'c' refleja la mutación
+fin</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Matriz de Especificaciones Técnicas -->
+    <section class="specs-matrix">
+      <div class="spec-matrix-cell">
+        <div class="spec-cell-header">
+          <svg class="icon" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>
+          <span>Emisión Binaria x86-64</span>
+        </div>
+        <p>Generación PE/COFF directa sin ensamblador ni enlazador externo. Emite código máquina x86-64 con alineación de llamadas al sistema y gestión de registros.</p>
+      </div>
+
+      <div class="spec-matrix-cell">
+        <div class="spec-cell-header">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          <span>Tipado Gradual y Análisis</span>
+        </div>
+        <p>Inferencia estática de tipos con anotaciones opcionales en parámetros y firmas de retorno. Detección temprana de incompatibilidad y aridad en <code>alma analizar</code>.</p>
+      </div>
+
+      <div class="spec-matrix-cell">
+        <div class="spec-cell-header">
+          <svg class="icon" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+          <span>Verificación Diferencial</span>
+        </div>
+        <p>Suite de pruebas continuas que contrasta byte a byte el comportamiento del intérprete frente a los backends C y propio en cada confirmación de código.</p>
+      </div>
+
+      <div class="spec-matrix-cell">
+        <div class="spec-cell-header">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+          <span>Sistema Modular de Paquetes</span>
+        </div>
+        <p>Aislamiento de símbolos con <code>importar ... desde</code> y control de dependencias mediante el manifiesto formal <code>alma.paquete</code>.</p>
+      </div>
+
+      <div class="spec-matrix-cell">
+        <div class="spec-cell-header">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+          <span>Librería de Sistemas y TLS</span>
+        </div>
+        <p>Implementación estándar de E/S de archivos, serialización JSON y cliente HTTP/HTTPS con cifrado TLS nativo sin dependencias de OpenSSL.</p>
+      </div>
+
+      <div class="spec-matrix-cell">
+        <div class="spec-cell-header">
+          <svg class="icon" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+          <span>Tooling Oficial para IDEs</span>
+        </div>
+        <p>Extensión desarrollada para Visual Studio Code con gramática TextMate, mapa de colores, soporte de depuración y diagnósticos en tiempo real.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ======================================================================
+       VISTA 2: DOCUMENTACIÓN TÉCNICA
+       ====================================================================== -->
+  <main class="view-section" id="view-docs">
+    <div class="docs-layout">
+      <!-- Sidebar -->
+      <aside class="docs-sidebar">
+        <div class="search-input-wrapper">
+          <svg class="icon icon-sm search-input-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" id="docsSearchInput" class="docs-search-box" placeholder="Buscar concepto o símbolo...">
+        </div>
+
+        <div class="docs-menu-group">
+          <div class="docs-menu-title">Arquitectura y Configuración</div>
+          <ul class="docs-menu-list">
+            <li><span class="docs-menu-item active" data-doc="intro">Introducción y Filosofía</span></li>
+            <li><span class="docs-menu-item" data-doc="instalacion">Instalación y CLI</span></li>
+            <li><span class="docs-menu-item" data-doc="primer-programa">Punto de Entrada y Estructura</span></li>
+          </ul>
+        </div>
+
+        <div class="docs-menu-group">
+          <div class="docs-menu-title">Especificación del Lenguaje</div>
+          <ul class="docs-menu-list">
+            <li><span class="docs-menu-item" data-doc="tipos">Tipado Gradual y Constantes</span></li>
+            <li><span class="docs-menu-item" data-doc="control">Estructuras de Control</span></li>
+            <li><span class="docs-menu-item" data-doc="funciones">Funciones y Recursión</span></li>
+            <li><span class="docs-menu-item" data-doc="colecciones">Listas y Diccionarios</span></li>
+            <li><span class="docs-menu-item" data-doc="objetos">Estructura vs. Modelo</span></li>
+            <li><span class="docs-menu-item" data-doc="metodos">Métodos y Receptor 'yo'</span></li>
+            <li><span class="docs-menu-item" data-doc="errores">Manejo Estructurado de Errores</span></li>
+          </ul>
+        </div>
+
+        <div class="docs-menu-group">
+          <div class="docs-menu-title">Subsistemas y Compilador</div>
+          <ul class="docs-menu-list">
+            <li><span class="docs-menu-item" data-doc="modulos">Módulos y Paquetes</span></li>
+            <li><span class="docs-menu-item" data-doc="stdlib">Librería Estándar</span></li>
+            <li><span class="docs-menu-item" data-doc="compilador">Backends Nativo y C</span></li>
+          </ul>
+        </div>
+      </aside>
+
+      <!-- Panel de Contenido -->
+      <section class="docs-content">
+        <!-- 1. Intro -->
+        <article class="doc-article active" id="doc-intro">
+          <h2>Introducción y Filosofía de Diseño</h2>
+          <p><strong>Alma</strong> es un lenguaje de programación de sistemas y propósito general, concebido en español, integrado en el ecosistema <strong>Auralix</strong>. Su objetivo es proporcionar herramientas de alto nivel de abstracción con control preciso de recursos y compilación independiente.</p>
+          <div class="doc-callout">
+            <strong>Regla Sintáctica Fundamental:</strong> Los bloques de código se delimitan por indentación y se cierran de manera explícita con el término <code>fin</code>. La gramática no emplea terminadores de sentencia punto y coma. Las notas de desarrollo utilizan el prefijo <code>//</code>.
+          </div>
+          <h3>Piso bajo, techo alto</h3>
+          <p>El diseño permite una curva de aprendizaje inicial directa mediante identificadores naturales (<code>si</code>, <code>mientras</code>, <code>funcion</code>, <code>imprimir</code>) manteniendo capacidades avanzadas: gestión de copia de memoria por valor frente a referencia, análisis semántico gradual y compilación binaria sin toolchains pesados.</p>
+        </article>
+
+        <!-- 2. Instalación -->
+        <article class="doc-article" id="doc-instalacion">
+          <h2>Instalación y Herramienta CLI</h2>
+          <p>La herramienta de compilación y ejecución de Alma se distribuye como binario autocontenido para Windows, Linux y arquitecturas ARM64.</p>
+          <h3>Windows x64</h3>
+          <pre class="code-pre"><code>irm https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.ps1 | iex</code></pre>
+          <h3>Linux x64 / ARM64 y Android (Termux)</h3>
+          <pre class="code-pre"><code>curl -fsSL https://raw.githubusercontent.com/Auralix-Studio/alma/main/distribucion/instalar.sh | sh</code></pre>
+          <h3>Comandos de la Interfaz de Línea de Comandos (CLI)</h3>
+          <table class="doc-table">
+            <thead>
+              <tr><th>Comando</th><th>Función</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>alma nuevo &lt;nombre&gt;</code></td><td>Inicializa un proyecto con su manifiesto <code>alma.paquete</code>.</td></tr>
+              <tr><td><code>alma ejecutar &lt;archivo.alma&gt;</code></td><td>Ejecución interactiva mediante el intérprete tree-walking.</td></tr>
+              <tr><td><code>alma compilar &lt;archivo.alma&gt;</code></td><td>Genera un binario ejecutable optimizado.</td></tr>
+              <tr><td><code>alma analizar &lt;archivo.alma&gt;</code></td><td>Inspección semántica estática y chequeo de tipos.</td></tr>
+              <tr><td><code>alma tokens / alma ast</code></td><td>Emisión de telemetría de tokens y árbol sintáctico.</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <!-- 3. Primer Programa -->
+        <article class="doc-article" id="doc-primer-programa">
+          <h2>Punto de Entrada y Estructura</h2>
+          <p>El punto de entrada convencional para aplicaciones ejecutables es la función <code>principal()</code>:</p>
+          <pre class="code-pre"><code class="language-alma">funcion principal()
+    imprimir("Inicio de ejecución en Alma")
+    identificador = "Modulo_01"
+    imprimir("Sub-sistema: " + identificador)
+fin</code></pre>
+          <p>Ejecución desde el terminal:</p>
+          <pre class="code-pre"><code>alma ejecutar principal.alma</code></pre>
+        </article>
+
+        <!-- 4. Tipos -->
+        <article class="doc-article" id="doc-tipos">
+          <h2>Tipado Gradual y Constantes</h2>
+          <p>Alma implementa un sistema de <strong>tipado gradual</strong> que permite la coexistencia de inferencia dinámica y anotaciones estáticas:</p>
+          <pre class="code-pre"><code class="language-alma">nombre = "Auralix"         // Inferencia de texto
+edad: entero = 24          // Anotación estática de 64 bits
+precio: decimal = 99.95    // Punto flotante f64
+activo: logico = verdadero  // Booleano (verdadero / falso)
+sin_dato: nulo = nulo      // Representación de valor nulo
+
+// Declaración inmutable evaluada estáticamente
+fijo LIMITE_BUFFER = 4096</code></pre>
+        </article>
+
+        <!-- 5. Control -->
+        <article class="doc-article" id="doc-control">
+          <h2>Estructuras de Control</h2>
+          <h3>Bifurcaciones Condicionales</h3>
+          <pre class="code-pre"><code class="language-alma">si umbral >= 90
+    imprimir("Nivel Nominal")
+sino si umbral >= 50
+    imprimir("Nivel Intermedio")
+sino
+    imprimir("Nivel Crítico")
+fin</code></pre>
+          <h3>Bucles de Ejecución</h3>
+          <pre class="code-pre"><code class="language-alma">i = 0
+mientras i < 5
+    imprimir("Iteración: " + texto(i))
+    i = i + 1
+fin
+
+para item en rango(4)
+    imprimir(item)
+fin</code></pre>
+        </article>
+
+        <!-- 6. Funciones -->
+        <article class="doc-article" id="doc-funciones">
+          <h2>Funciones y Recursión</h2>
+          <pre class="code-pre"><code class="language-alma">funcion calcular_area(base: decimal, altura: decimal) -> decimal
+    retornar (base * altura) / 2.0
+fin
+
+funcion factorial(n: entero) -> entero
+    si n <= 1
+        retornar 1
+    sino
+        retornar n * factorial(n - 1)
+    fin
+fin</code></pre>
+        </article>
+
+        <!-- 7. Colecciones -->
+        <article class="doc-article" id="doc-colecciones">
+          <h2>Colecciones: Listas y Diccionarios</h2>
+          <pre class="code-pre"><code class="language-alma">registros = [10, 20, 30]
+agregar(registros, 40)
+imprimir(registros[0])
+imprimir(longitud(registros))
+
+tabla = {"alpha": 1, "beta": 2}
+tabla["gamma"] = 3
+si tiene(tabla, "alpha")
+    imprimir(tabla["alpha"])
+fin</code></pre>
+        </article>
+
+        <!-- 8. Estructura vs Modelo -->
+        <article class="doc-article" id="doc-objetos">
+          <h2>Estructura (Valor) vs. Modelo (Referencia)</h2>
+          <p>Definición del modelo de memoria del lenguaje:</p>
+          <ul>
+            <li><strong><code>estructura</code>:</strong> Tipo de datos con semántica por valor. La asignación genera una duplicación independiente de la memoria.</li>
+            <li><strong><code>modelo</code>:</strong> Tipo de datos con semántica por referencia. Las asignaciones comparten el mismo puntero a la instancia activa.</li>
+          </ul>
+        </article>
+
+        <!-- 9. Métodos -->
+        <article class="doc-article" id="doc-metodos">
+          <h2>Métodos y Receptor 'yo'</h2>
+          <pre class="code-pre"><code class="language-alma">modelo ServidorTCP
+    puerto: entero
+
+    funcion vincular(p: entero)
+        yo.puerto = p
+    fin
+
+    funcion obtener_puerto() -> entero
+        retornar puerto
+    fin
+fin</code></pre>
+        </article>
+
+        <!-- 10. Errores -->
+        <article class="doc-article" id="doc-errores">
+          <h2>Manejo Estructurado de Errores</h2>
+          <pre class="code-pre"><code class="language-alma">funcion conectar(socket_id: entero)
+    si socket_id < 0
+        lanzar error("Descriptor de socket inválido.")
+    fin
+fin
+
+funcion principal()
+    intentar
+        conectar(-1)
+    capturar (e)
+        imprimir("Falla capturada: " + e.mensaje)
+    fin
+fin</code></pre>
+        </article>
+
+        <!-- 11. Módulos -->
+        <article class="doc-article" id="doc-modulos">
+          <h2>Módulos y Manifiesto de Paquete</h2>
+          <pre class="code-pre"><code class="language-alma">importar calcular_checksum desde "./red/crc.alma"
+importar Controlador desde "./dispositivos/driver.alma"</code></pre>
+        </article>
+
+        <!-- 12. Stdlib -->
+        <article class="doc-article" id="doc-stdlib">
+          <h2>Librería Estándar de Sistemas</h2>
+          <table class="doc-table">
+            <thead>
+              <tr><th>Módulo</th><th>Funciones Disponibles</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>matematicas</code></td><td><code>raiz</code>, <code>potencia</code>, <code>absoluto</code>, <code>piso</code>, <code>techo</code>, <code>redondear</code>, <code>minimo</code>, <code>maximo</code>, <code>aleatorio</code>, <code>PI</code>, <code>E</code></td></tr>
+              <tr><td><code>cadena</code></td><td><code>dividir</code>, <code>unir</code>, <code>reemplazar</code>, <code>mayusculas</code>, <code>minusculas</code>, <code>contiene</code>, <code>recortar</code></td></tr>
+              <tr><td><code>sistema</code></td><td><code>leer_archivo</code>, <code>escribir_archivo</code>, <code>existe</code>, <code>salir</code></td></tr>
+              <tr><td><code>json</code></td><td><code>analizar</code>, <code>serializar</code></td></tr>
+              <tr><td><code>red</code></td><td><code>obtener(url)</code>, <code>publicar(url, payload)</code> (Conectividad HTTP/HTTPS con TLS nativo)</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <!-- 13. Compilador -->
+        <article class="doc-article" id="doc-compilador">
+          <h2>Backends de Compilación Nativa</h2>
+          <pre class="code-pre"><code>// Compilación estándar vía transpilador C optimizado
+alma compilar archivo.alma -o salida.exe
+
+// Compilación directa experimental con backend PE x86_64 propio
+alma compilar archivo.alma --backend=propio</code></pre>
+        </article>
+      </section>
+    </div>
+  </main>
+
+  <!-- ======================================================================
+       VISTA 3: PLAYGROUND / TERMINAL EN VIVO
+       ====================================================================== -->
+  <main class="view-section" id="view-playground">
+    <div style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div>
+        <h2>Playground de Evaluación en Línea</h2>
+        <p>Entorno de ejecución de Alma en cliente con captura de salida y análisis de tiempo de ciclo.</p>
+      </div>
+      <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <select id="playgroundExamples" class="example-select">
+          <option value="hola">Caso: Hola Mundo</option>
+          <option value="memoria">Caso: Valor vs Referencia</option>
+          <option value="factorial">Caso: Factorial Recursivo</option>
+          <option value="colecciones">Caso: Listas y Diccionarios</option>
+          <option value="errores">Caso: Manejo de Excepciones</option>
+        </select>
+        <button id="btnPlaygroundRun" class="btn-primary">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          <span>Ejecutar Código</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="playground-container">
+      <!-- Editor -->
+      <div class="editor-panel">
+        <div class="panel-header">
+          <span class="panel-title">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            <span>principal.alma</span>
+          </span>
+          <span class="tech-badge tech-badge-violet">EDITOR NATIVO</span>
+        </div>
+        <textarea id="playgroundEditor" class="editor-textarea" spellcheck="false">// Caso de prueba en Alma
+funcion principal()
+    imprimir("Inicialización del runtime de Alma")
+    imprimir("Sintaxis en español sobre arquitectura nativa.")
+fin</textarea>
+      </div>
+
+      <!-- Consola -->
+      <div class="terminal-panel">
+        <div class="panel-header">
+          <span class="panel-title">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+            <span>Salida Estándar (STDOUT)</span>
+          </span>
+          <button id="btnPlaygroundClear" class="btn-copy">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            <span>Limpiar</span>
+          </button>
+        </div>
+        <div id="playgroundTerminal" class="terminal-output">// Terminal lista. Pulse "Ejecutar Código" para iniciar la evaluación...</div>
+        <div class="terminal-meta">
+          <span>Tiempo de ejecución: <strong id="playgroundTime" style="color: var(--status-success);">0 ms</strong></span>
+          <span>Ciclos de instrucción: <strong id="playgroundSteps" style="color: var(--status-info);">0 pasos</strong></span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ======================================================================
+       VISTA 4: LABORATORIO DE INGENIERÍA / JUEGOS
+       ====================================================================== -->
+  <main class="view-section" id="view-juegos">
+    <div class="games-hub-header">
+      <div class="section-label" style="justify-content: center;">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+        <span>Entrenamiento y Verificación</span>
+      </div>
+      <h2 class="section-title">Laboratorio Interactivo de Algoritmos</h2>
+      <p>Módulos de verificación técnica para comprobar conceptos de memoria, depuración de AST y navegación autónoma en Alma.</p>
+    </div>
+
+    <!-- Navegación entre juegos -->
+    <div class="games-nav">
+      <button class="game-nav-btn active" data-game="memoria">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+        <span>Inspección de Memoria</span>
+      </button>
+      <button class="game-nav-btn" data-game="cazabugs">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="22" y1="12" x2="18" y2="12"></line><line x1="6" y1="12" x2="2" y2="12"></line><line x1="12" y1="6" x2="12" y2="2"></line><line x1="12" y1="22" x2="12" y2="18"></line></svg>
+        <span>Depuración Semántica</span>
+      </button>
+      <button class="game-nav-btn" data-game="laberinto">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+        <span>Navegación Autónoma</span>
+      </button>
+    </div>
+
+    <!-- SECCIÓN JUEGO 1: DESAFÍO DE MEMORIA -->
+    <div class="game-section active" id="sec-memoria">
+      <div id="memoryGameContenido">
+        <!-- Render dinámico en juegos.js -->
+      </div>
+    </div>
+
+    <!-- SECCIÓN JUEGO 2: CAZA BUGS -->
+    <div class="game-section" id="sec-cazabugs">
+      <div id="cazaBugsContenido">
+        <!-- Render dinámico en juegos.js -->
+      </div>
+    </div>
+
+    <!-- SECCIÓN JUEGO 3: LABERINTO DEL DRON -->
+    <div class="game-section" id="sec-laberinto">
+      <div class="maze-game-container">
+        <!-- Canvas Cuadrícula -->
+        <div class="maze-canvas-wrapper">
+          <canvas id="mazeCanvas" width="420" height="420"></canvas>
+          <div id="mazeStatus" style="margin-top: 12px; font-family: var(--font-mono); font-size: 0.8rem; color: #cbd5e1; text-align: center; min-height: 40px;">
+            [TELEMETRÍA]: Dron en posición inicial (X: 01, Y: 01). Escriba algoritmo en Alma.
+          </div>
+        </div>
+
+        <!-- Editor de Navegación -->
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+            <h4 style="color: #fff;">Algoritmo de Control de Vuelo</h4>
+            <span class="tech-badge tech-badge-amber">RECORRIDO ESPACIAL</span>
+          </div>
+          <p style="font-size: 0.88rem; margin-bottom: 1rem; color: var(--text-muted);">
+            Programe la secuencia de navegación utilizando: <code>avanzar()</code>, <code>girar_derecha()</code>, <code>girar_izquierda()</code>, <code>mientras no_meta() ... fin</code>.
+          </p>
+
+          <textarea id="mazeCodeEditor" class="editor-textarea" style="height: 200px; border-radius: 6px; border: 1px solid var(--border-subtle);" spellcheck="false">// Control de trayectoria para evasión de obstáculos
+funcion principal()
+    avanzar()
+    avanzar()
+    girar_derecha()
+    avanzar()
+    avanzar()
+    avanzar()
+    girar_izquierda()
+    avanzar()
+    avanzar()
+    avanzar()
+    avanzar()
+    girar_derecha()
+    avanzar()
+    avanzar()
+    avanzar()
+    avanzar()
+fin</textarea>
+
+          <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+            <button id="btnRunMaze" class="btn-primary">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              <span>Ejecutar Trayectoria</span>
+            </button>
+            <button id="btnResetMaze" class="btn-secondary">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+              <span>Restablecer</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ======================================================================
+       PIE DE PÁGINA
+       ====================================================================== -->
+  <footer class="footer">
+    <div class="footer-content">
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <img src="assets/marca/alma-logo.svg" alt="Alma" style="width: 20px; height: 20px;">
+          <strong style="color: #fff; font-size: 1rem; font-family: var(--font-mono);">Alma Toolchain</strong>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-dim);">
+          Lenguaje de programación de sistemas en español &bull; Ecosistema Auralix &bull; Licencia MIT
+        </p>
+      </div>
+
+      <ul class="footer-links">
+        <li><a href="#" data-goto="inicio">Inicio</a></li>
+        <li><a href="#" data-goto="docs">Documentación</a></li>
+        <li><a href="#" data-goto="playground">Playground</a></li>
+        <li><a href="#" data-goto="juegos">Laboratorio</a></li>
+        <li><a href="https://github.com/Auralix-Studio/alma" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+      </ul>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="js/interprete-alma.js"></script>
+  <script src="js/juegos.js"></script>
+  <script src="js/docs.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

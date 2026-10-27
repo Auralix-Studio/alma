@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Alma">
+  <title>Alma (fondo oscuro)</title>
+  <path d="M32 4C36 16 50 22 50 38a18 18 0 0 1-36 0c0-9 5-14 9-18 1 6 4 9 7 10-2-9 0-18 2-26z" fill="#9B85FF"/>
+  <circle cx="32" cy="40" r="9" fill="#FFB547"/>
+</svg>
